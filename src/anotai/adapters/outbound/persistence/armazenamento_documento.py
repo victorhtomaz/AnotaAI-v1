@@ -15,5 +15,11 @@ class ArmazenamentoDocumento:
         self._repositorio.salvar(documento)
         return self._repositorio.caminho_banco
 
+    def buscar_por_id(self, documento_id: str) -> Documento | None:
+        return self._repositorio.buscar_por_id(documento_id)
+
+    def listar(self) -> list[Documento]:
+        return self._repositorio.listar()
+
     def existe(self, documento_id: str) -> bool:
         return self._repositorio.existe(documento_id)

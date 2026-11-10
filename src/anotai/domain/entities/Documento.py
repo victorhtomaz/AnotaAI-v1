@@ -29,12 +29,21 @@ class UnidadeDocumento:
         "group",
     }
     TIPOS_VISUAIS_VALIDOS = {"figure", "table", "graph", "formula"}
+    FONTES_VALIDAS = {"native", "ollama", "inferred"}
 
     def __post_init__(self) -> None:
+        if not self.id_unidade:
+            raise ValueError("id_unidade não pode ser vazio")
+        if not self.id_documento:
+            raise ValueError("id_documento não pode ser vazio")
+        if not self.id_pagina:
+            raise ValueError("id_pagina não pode ser vazio")
         if self.tipo not in self.TIPOS_VALIDOS:
             raise ValueError(f"tipo de unidade inválido: {self.tipo}")
         if self.ordem_leitura < 1:
             raise ValueError("ordem de leitura deve ser positiva")
+        if self.fonte not in self.FONTES_VALIDAS:
+            raise ValueError(f"fonte inválida: {self.fonte}")
 
     @property
     def participa_alinhamento(self) -> bool:
@@ -50,9 +59,15 @@ class PaginaDocumento:
     metodo_extracao: str
     unidades: list[UnidadeDocumento] = field(default_factory=list)
 
+    METODOS_VALIDOS = {"native", "mixed"}
+
     def __post_init__(self) -> None:
+        if not self.id_pagina:
+            raise ValueError("id_pagina não pode ser vazio")
         if self.numero_pagina < 1:
             raise ValueError("número de página deve ser positivo")
+        if self.metodo_extracao not in self.METODOS_VALIDOS:
+            raise ValueError(f"método de extração inválido: {self.metodo_extracao}")
 
 
 @dataclass
@@ -63,3 +78,11 @@ class Documento:
     paginas: list[PaginaDocumento]
     versao_processamento: str
     proveniencia: ProvenienciaDocumento
+
+    def __post_init__(self) -> None:
+        if not self.id_documento:
+            raise ValueError("id_documento não pode ser vazio")
+        if not self.uri_origem:
+            raise ValueError("uri_origem não pode ser vazia")
+        if not self.titulo:
+            raise ValueError("título não pode ser vazio")

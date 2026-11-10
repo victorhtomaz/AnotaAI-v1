@@ -2,28 +2,30 @@ import json
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from anotai.application.ports.repositorio_aula import RepositorioAula
 from anotai.domain.entities.Aula import Aula
 from anotai.domain.entities.IntervaloExplicativo import IntervaloExplicativo
 from anotai.domain.entities.SegmentoTranscricao import SegmentoTranscricao
+from anotai.domain.entities.ValidadorIntegridade import ValidadorIntegridade
 from anotai.domain.value_objects.IntervaloTempo import IntervaloTempo
 from anotai.domain.value_objects.MetadadosAudio import MetadadosAudio
 
-from .base import Base
+from .base import Base, criar_engine_sqlite
 from .modelo_aula import ModeloAula, ModeloIntervaloExplicativo, ModeloSegmentoTranscricao
 
 
 class RepositorioAulaSQLite(RepositorioAula):
     def __init__(self, caminho_banco: Path) -> None:
-        caminho_banco.parent.mkdir(parents=True, exist_ok=True)
-        self._engine = create_engine(f"sqlite:///{caminho_banco}", future=True)
         self.caminho_banco = caminho_banco
+        self._engine = criar_engine_sqlite(caminho_banco)
         Base.metadata.create_all(self._engine)
 
     def salvar(self, aula: Aula, carga_bruta_asr: dict[str, Any] | None = None) -> None:
+        ValidadorIntegridade.validar_aula(aula)
+
         with Session(self._engine) as sessao:
             existente = sessao.get(ModeloAula, aula.id_aula)
             if existente is not None:
