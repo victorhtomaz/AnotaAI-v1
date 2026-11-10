@@ -2,6 +2,7 @@ from .AudioInvalido import AudioInvalido
 from .DocumentoInvalido import DocumentoInvalido
 from .ErroAnaliseVisual import ErroAnaliseVisual
 from .ErroAudio import ErroAudio
+from .ErroBusca import ErroBusca
 from .ErroIntegridade import ErroIntegridade
 from .ErroProcessamentoDocumento import ErroProcessamentoDocumento
 from .ErroTranscricao import ErroTranscricao
@@ -12,6 +13,7 @@ __all__ = [
     "DocumentoInvalido",
     "ErroAnaliseVisual",
     "ErroAudio",
+    "ErroBusca",
     "ErroIntegridade",
     "ErroProcessamentoDocumento",
     "ErroTranscricao",

@@ -23,6 +23,7 @@ class Settings:
     interval_silence_threshold: float = 1.5
     interval_min_duration: float = 10.0
     interval_max_duration: float = 45.0
+    abstention_threshold: float = 0.0
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -58,5 +59,8 @@ class Settings:
             ),
             interval_max_duration=float(
                 os.getenv("ANOTAI_INTERVALO_DURACAO_MAXIMA", cls.interval_max_duration)
+            ),
+            abstention_threshold=float(
+                os.getenv("ANOTAI_LIMIAR_ABSTENCAO", cls.abstention_threshold)
             ),
         )

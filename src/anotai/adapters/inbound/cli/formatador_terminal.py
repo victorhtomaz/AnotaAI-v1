@@ -1,4 +1,6 @@
 from anotai.domain.entities.Aula import Aula
+from anotai.domain.entities.Documento import Documento
+from anotai.domain.value_objects.EvidenciaRecuperacao import ResultadoRecuperacaoIntervalo
 
 
 def formatar_aula_texto(
@@ -48,3 +50,59 @@ def formatar_aula_texto(
 
     linhas.append("=" * 80)
     return "\n".join(linhas)
+
+
+def formatar_recuperacao_texto(
+    aula: Aula,
+    documento: Documento,
+    resultados: list[ResultadoRecuperacaoIntervalo],
+) -> str:
+    """Formata evidências e candidatos recuperados para exibição textual no terminal."""
+    estrategia = resultados[0].estrategia if resultados else "desconhecida"
+    limiar = resultados[0].limiar_abstencao if resultados else 0.0
+
+    linhas = [
+        "=" * 80,
+        "AnotaAI — Recuperação e Busca de Candidatos",
+        "=" * 80,
+        f"Aula: {aula.id_aula} ({aula.titulo})",
+        f"Documento: {documento.id_documento} ({documento.titulo})",
+        f"Estratégia: {estrategia.upper()} | Limiar de Abstenção: {limiar:.4f}",
+        "Aviso: As pontuações indicam similaridade e não probabilidade calibrada.",
+        "=" * 80,
+    ]
+
+    for res in resultados:
+        linhas.append("-" * 80)
+        linhas.append(
+            f"[{res.ordem_intervalo:02d}] {res.intervalo_tempo.formatar()} "
+            f'"{res.texto_intervalo}"'
+        )
+
+        if res.abstido:
+            linhas.append(f"     [ABSTENÇÃO] {res.motivo_abstencao}")
+            continue
+
+        linhas.append("     Páginas sugeridas:")
+        for cand_p in res.candidatos_pagina:
+            linhas.append(
+                f"       - Pág. {cand_p.numero_pagina:02d} "
+                f"(score: {cand_p.pontuacao:.4f} [direto: {cand_p.pontuacao_direta:.4f}, "
+                f"unidades: {cand_p.pontuacao_unidades:.4f}])"
+            )
+
+        if res.candidatos_unidade:
+            linhas.append("     Unidades sugeridas:")
+            for cand_u in res.candidatos_unidade:
+                txt = (cand_u.texto or "").strip()
+                if len(txt) > 80:
+                    txt = txt[:77] + "..."
+                linhas.append(
+                    f"       - [Pág. {cand_u.numero_pagina:02d} | u#{cand_u.ordem_leitura:02d} "
+                    f"{cand_u.tipo_unidade} | {cand_u.fonte}] "
+                    f'(score: {cand_u.pontuacao:.4f}) "{txt}"'
+                )
+
+    linhas.append("=" * 80)
+    return "\n".join(linhas)
+

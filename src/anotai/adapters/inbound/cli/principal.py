@@ -1,6 +1,10 @@
 import argparse
 import sys
 
+from anotai.adapters.inbound.cli.comando_buscar import (
+    configurar_parser_buscar,
+    executar_comando_buscar,
+)
 from anotai.adapters.inbound.cli.comando_exibir import (
     configurar_parser_exibir,
     executar_comando_exibir,
@@ -33,6 +37,10 @@ def exibir_aula(args: argparse.Namespace, settings: Settings) -> int:
     return executar_comando_exibir(args, settings, repo_cls=RepositorioAulaSQLite)
 
 
+def buscar_candidatos(args: argparse.Namespace, settings: Settings) -> int:
+    return executar_comando_buscar(args, settings)
+
+
 def criar_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="anotai",
@@ -43,6 +51,7 @@ def criar_parser() -> argparse.ArgumentParser:
     configurar_parser_pdf(subparsers)
     configurar_parser_transcrever(subparsers)
     configurar_parser_exibir(subparsers)
+    configurar_parser_buscar(subparsers)
 
     return parser
 
@@ -52,7 +61,7 @@ def main(argumentos: list[str] | None = None) -> int:
     parser = criar_parser()
 
     raw_args = sys.argv[1:] if argumentos is None else argumentos
-    if raw_args and raw_args[0] not in ("pdf", "transcrever", "exibir", "-h", "--help"):
+    if raw_args and raw_args[0] not in ("pdf", "transcrever", "exibir", "buscar", "-h", "--help"):
         if raw_args[0].lower().endswith(".pdf"):
             raw_args = ["pdf", *raw_args]
         elif any(
@@ -69,6 +78,8 @@ def main(argumentos: list[str] | None = None) -> int:
         return transcrever_audio(args, settings)
     if args.subcomando == "exibir":
         return exibir_aula(args, settings)
+    if args.subcomando == "buscar":
+        return buscar_candidatos(args, settings)
 
     parser.print_help()
     return 0
@@ -80,6 +91,7 @@ if __name__ == "__main__":
 __all__ = [
     "RepositorioAulaSQLite",
     "TranscreverAula",
+    "buscar_candidatos",
     "criar_parser",
     "exibir_aula",
     "formatar_aula_texto",
