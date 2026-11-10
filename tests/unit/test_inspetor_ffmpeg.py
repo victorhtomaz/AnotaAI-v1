@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from anotai.adapters.outbound.audio.inspetor_ffmpeg import InspetorFFmpeg
-from anotai.domain.exceptions.AudioInvalido import AudioInvalido
+from anotai.domain.exceptions import AudioInvalido
 
 
 def test_inspetor_ffmpeg_arquivo_inexistente(tmp_path: Path) -> None:

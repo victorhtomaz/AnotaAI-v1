@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from anotai.adapters.outbound.audio.provedor_whisperx import ProvedorWhisperX
-from anotai.domain.exceptions.ErroTranscricao import ErroTranscricao
+from anotai.domain.exceptions import ErroTranscricao
 
 
 def test_resolver_dispositivo_e_tipo_cpu() -> None:

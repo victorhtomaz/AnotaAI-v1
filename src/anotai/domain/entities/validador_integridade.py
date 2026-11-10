@@ -1,8 +1,9 @@
-from anotai.domain.entities.Alinhamento import Alinhamento
-from anotai.domain.entities.Anotacao import Anotacao
-from anotai.domain.entities.Aula import Aula
-from anotai.domain.entities.Documento import Documento
-from anotai.domain.exceptions.ErroIntegridade import ErroIntegridade
+from anotai.domain.exceptions import ErroIntegridade
+
+from .alinhamento import Alinhamento
+from .anotacao import Anotacao
+from .aula import Aula
+from .documento import Documento
 
 
 class ValidadorIntegridade:

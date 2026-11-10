@@ -1,8 +1,8 @@
 import pytest
 
 from anotai.adapters.outbound.ollama import AnalisadorVisualOllama
-from anotai.domain.entities.Documento import UnidadeDocumento
-from anotai.domain.exceptions.ErroAnaliseVisual import ErroAnaliseVisual
+from anotai.domain.entities import UnidadeDocumento
+from anotai.domain.exceptions import ErroAnaliseVisual
 
 
 class FakeClient:

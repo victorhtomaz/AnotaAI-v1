@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 
-from anotai.domain.value_objects.CaixaDelimitadora import CaixaDelimitadora
-from anotai.domain.value_objects.ProvenienciaDocumento import ProvenienciaDocumento
+from anotai.domain.value_objects import CaixaDelimitadora, ProvenienciaDocumento
 
 
 @dataclass

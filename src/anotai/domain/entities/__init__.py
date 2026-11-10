@@ -1,10 +1,10 @@
-from .Alinhamento import Alinhamento
-from .Anotacao import Anotacao
-from .Aula import Aula
-from .Documento import Documento, PaginaDocumento, UnidadeDocumento
-from .IntervaloExplicativo import IntervaloExplicativo
-from .SegmentoTranscricao import SegmentoTranscricao
-from .ValidadorIntegridade import ValidadorIntegridade
+from .alinhamento import Alinhamento
+from .anotacao import Anotacao
+from .aula import Aula
+from .documento import Documento, PaginaDocumento, UnidadeDocumento
+from .intervalo_explicativo import IntervaloExplicativo
+from .segmento_transcricao import SegmentoTranscricao
+from .validador_integridade import ValidadorIntegridade
 
 __all__ = [
     "Alinhamento",

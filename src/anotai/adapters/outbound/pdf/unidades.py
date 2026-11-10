@@ -6,8 +6,8 @@ from typing import Any
 
 import pymupdf as fitz
 
-from anotai.domain.entities.Documento import UnidadeDocumento
-from anotai.domain.value_objects.CaixaDelimitadora import CaixaDelimitadora
+from anotai.domain.entities import UnidadeDocumento
+from anotai.domain.value_objects import CaixaDelimitadora
 
 from .imagens import ImagemBrutaPdf, RenderPaginaPdf
 from .normalizacao import normalizar_conteudo_extraido

@@ -10,7 +10,7 @@ from anotai.application.ports.provedor_transcricao import (
     ResultadoTranscricao,
     SegmentoBrutoASR,
 )
-from anotai.domain.exceptions.ErroTranscricao import ErroTranscricao
+from anotai.domain.exceptions import ErroTranscricao
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,17 @@ class ProvedorWhisperX(ProvedorTranscricao):
         self._dispositivo, self._tipo_computacao = self._resolver_dispositivo_e_tipo(
             dispositivo, tipo_computacao
         )
+        self._modelo_carregado: Any = None
+
+    def _obter_modelo_asr(self) -> Any:
+        if self._modelo_carregado is None:
+            self._modelo_carregado = whisperx.load_model(
+                self.modelo,
+                device=self._dispositivo,
+                compute_type=self._tipo_computacao,
+                language=self.idioma,
+            )
+        return self._modelo_carregado
 
     @staticmethod
     def _resolver_dispositivo_e_tipo(dispositivo: str, tipo_computacao: str) -> tuple[str, str]:
@@ -57,12 +68,7 @@ class ProvedorWhisperX(ProvedorTranscricao):
             )
 
         try:
-            modelo_asr = whisperx.load_model(
-                self.modelo,
-                device=self._dispositivo,
-                compute_type=self._tipo_computacao,
-                language=self.idioma,
-            )
+            modelo_asr = self._obter_modelo_asr()
             audio = whisperx.load_audio(str(caminho_audio))
             resultado_bruto = modelo_asr.transcribe(audio, batch_size=self.tamanho_lote)
 

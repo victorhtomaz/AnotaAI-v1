@@ -12,7 +12,7 @@ from anotai.adapters.outbound.persistence import RepositorioAulaSQLite, Reposito
 from anotai.adapters.outbound.search import IndiceBM25, IndiceEmbeddings, IndiceHibrido
 from anotai.application.use_cases.recuperar_candidatos import RecuperarCandidatos
 from anotai.config import Settings
-from anotai.domain.exceptions.ErroBusca import ErroBusca
+from anotai.domain.exceptions import ErroBusca
 
 
 def configurar_parser_buscar(subparsers: argparse._SubParsersAction) -> None:
@@ -80,45 +80,81 @@ def executar_comando_buscar(
     # 1. Resolução da aula
     aula = repo_aula.buscar_por_id(args.id_aula)
     if aula is None:
-        aulas = repo_aula.listar()
-        matches_aula = [
-            a
-            for a in aulas
-            if args.id_aula in a.id_aula or args.id_aula.lower() in a.titulo.lower()
-        ]
-        if len(matches_aula) == 1:
-            aula = matches_aula[0]
-        elif len(matches_aula) > 1:
-            print(f"Múltiplas aulas encontradas para '{args.id_aula}':", file=sys.stderr)
-            for m in matches_aula:
-                print(f"  - {m.id_aula} ({m.titulo})", file=sys.stderr)
-            return 1
+        if hasattr(repo_aula, "buscar_por_termo"):
+            matches_aula_tuplas = repo_aula.buscar_por_termo(args.id_aula)
+            if len(matches_aula_tuplas) == 1:
+                aula = repo_aula.buscar_por_id(matches_aula_tuplas[0][0])
+            elif len(matches_aula_tuplas) > 1:
+                print(f"Múltiplas aulas encontradas para '{args.id_aula}':", file=sys.stderr)
+                for m_id, m_titulo in matches_aula_tuplas:
+                    print(f"  - {m_id} ({m_titulo})", file=sys.stderr)
+                return 1
+            else:
+                print(f"Aula '{args.id_aula}' não encontrada no banco de dados.", file=sys.stderr)
+                return 1
         else:
-            print(f"Aula '{args.id_aula}' não encontrada no banco de dados.", file=sys.stderr)
-            return 1
+            aulas = repo_aula.listar()
+            matches_aula = [
+                a
+                for a in aulas
+                if args.id_aula in a.id_aula or args.id_aula.lower() in a.titulo.lower()
+            ]
+            if len(matches_aula) == 1:
+                aula = matches_aula[0]
+            elif len(matches_aula) > 1:
+                print(f"Múltiplas aulas encontradas para '{args.id_aula}':", file=sys.stderr)
+                for m in matches_aula:
+                    print(f"  - {m.id_aula} ({m.titulo})", file=sys.stderr)
+                return 1
+            else:
+                print(f"Aula '{args.id_aula}' não encontrada no banco de dados.", file=sys.stderr)
+                return 1
 
     # 2. Resolução do documento
     documento = repo_doc.buscar_por_id(args.id_documento)
     if documento is None:
-        docs = repo_doc.listar()
-        matches_doc = [
-            d
-            for d in docs
-            if args.id_documento in d.id_documento or args.id_documento.lower() in d.titulo.lower()
-        ]
-        if len(matches_doc) == 1:
-            documento = matches_doc[0]
-        elif len(matches_doc) > 1:
-            print(f"Múltiplos documentos encontrados para '{args.id_documento}':", file=sys.stderr)
-            for md in matches_doc:
-                print(f"  - {md.id_documento} ({md.titulo})", file=sys.stderr)
-            return 1
+        if hasattr(repo_doc, "buscar_por_termo"):
+            matches_doc_tuplas = repo_doc.buscar_por_termo(args.id_documento)
+            if len(matches_doc_tuplas) == 1:
+                documento = repo_doc.buscar_por_id(matches_doc_tuplas[0][0])
+            elif len(matches_doc_tuplas) > 1:
+                print(
+                    f"Múltiplos documentos encontrados para '{args.id_documento}':",
+                    file=sys.stderr,
+                )
+                for md_id, md_titulo in matches_doc_tuplas:
+                    print(f"  - {md_id} ({md_titulo})", file=sys.stderr)
+                return 1
+            else:
+                print(
+                    f"Documento '{args.id_documento}' não encontrado no banco de dados.",
+                    file=sys.stderr,
+                )
+                return 1
         else:
-            print(
-                f"Documento '{args.id_documento}' não encontrado no banco de dados.",
-                file=sys.stderr,
-            )
-            return 1
+            docs = repo_doc.listar()
+            termo = args.id_documento.lower()
+            matches_doc = [
+                d
+                for d in docs
+                if args.id_documento in d.id_documento or termo in d.titulo.lower()
+            ]
+            if len(matches_doc) == 1:
+                documento = matches_doc[0]
+            elif len(matches_doc) > 1:
+                print(
+                    f"Múltiplos documentos encontrados para '{args.id_documento}':",
+                    file=sys.stderr,
+                )
+                for md in matches_doc:
+                    print(f"  - {md.id_documento} ({md.titulo})", file=sys.stderr)
+                return 1
+            else:
+                print(
+                    f"Documento '{args.id_documento}' não encontrado no banco de dados.",
+                    file=sys.stderr,
+                )
+                return 1
 
     # 3. Construção dos índices de busca conforme estratégia
     if args.strategy == "bm25":

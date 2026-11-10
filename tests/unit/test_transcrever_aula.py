@@ -3,7 +3,7 @@ from pathlib import Path
 
 from anotai.application.ports.provedor_transcricao import ResultadoTranscricao, SegmentoBrutoASR
 from anotai.application.use_cases.transcrever_aula import TranscreverAula
-from anotai.domain.value_objects.MetadadosAudio import MetadadosAudio
+from anotai.domain.value_objects import MetadadosAudio
 
 
 class InspetorFake:

@@ -1,6 +1,6 @@
 from anotai.application.use_cases.agrupar_intervalos import AgrupadorIntervalos
-from anotai.domain.entities.SegmentoTranscricao import SegmentoTranscricao
-from anotai.domain.value_objects.IntervaloTempo import IntervaloTempo
+from anotai.domain.entities import SegmentoTranscricao
+from anotai.domain.value_objects import IntervaloTempo
 
 
 def criar_segmento(ordem: int, inicio: float, fim: float, texto: str) -> SegmentoTranscricao:
@@ -68,3 +68,18 @@ def test_agrupamento_divide_ao_atingir_duracao_maxima() -> None:
     assert intervalos[0].intervalo.fim == 35.0
     assert intervalos[1].intervalo.inicio == 35.0
     assert intervalos[1].intervalo.fim == 55.0
+
+
+def test_agrupamento_trata_anomalia_timestamp_sobreposto() -> None:
+    # Segmentos com leve sobreposição/inversão de timestamps do ASR
+    segs = [
+        criar_segmento(1, 2.0, 5.0, "Fala 1."),
+        criar_segmento(2, 1.0, 4.5, "Fala 2 sobreposta."),
+    ]
+    agrupador = AgrupadorIntervalos(duracao_minima=10.0, duracao_maxima=45.0)
+    intervalos = agrupador.agrupar(segs, "aula-1")
+
+    assert len(intervalos) == 1
+    assert intervalos[0].intervalo.inicio == 1.0
+    assert intervalos[0].intervalo.fim == 5.0
+    assert intervalos[0].intervalo.duracao == 4.0

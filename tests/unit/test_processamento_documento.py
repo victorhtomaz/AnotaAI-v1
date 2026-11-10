@@ -5,8 +5,7 @@ import pytest
 
 from anotai.adapters.outbound.pdf import ExtratorPDF
 from anotai.adapters.outbound.pdf.extrator_pdf import identificar_xrefs_template
-from anotai.domain.exceptions.DocumentoInvalido import DocumentoInvalido
-from anotai.domain.exceptions.MetodoExtracaoNaoSuportado import MetodoExtracaoNaoSuportado
+from anotai.domain.exceptions import DocumentoInvalido, MetodoExtracaoNaoSuportado
 
 
 def _pdf(tmp_path: Path, text: str = "Conteúdo suficiente para extração nativa.") -> Path:
@@ -333,10 +332,7 @@ def test_rejects_empty_or_encrypted_pdf(tmp_path: Path) -> None:
         ExtratorPDF().extrair(protegido, "native")
 
 
-def test_detects_sections_and_renders_page_with_highlights(tmp_path: Path) -> None:
-    from anotai.adapters.outbound.pdf import DestaqueVisual, RenderizadorPaginaPyMuPdf
-    from anotai.domain.value_objects.CaixaDelimitadora import CaixaDelimitadora
-
+def test_extrair_documento_com_toc(tmp_path: Path) -> None:
     path = tmp_path / "secoes.pdf"
     doc = pymupdf.open()
     p1 = doc.new_page()
@@ -348,12 +344,5 @@ def test_detects_sections_and_renders_page_with_highlights(tmp_path: Path) -> No
 
     resultado = ExtratorPDF().extrair(path, "native")
     assert resultado.proveniencia.configuracao is not None
-    assert resultado.proveniencia.configuracao["secoes_detectadas"] == "1"
-
-    png = RenderizadorPaginaPyMuPdf().renderizar(
-        path,
-        1,
-        destaques=[DestaqueVisual(CaixaDelimitadora(50, 40, 400, 150))],
-        palavras_chave=["Algoritmos"],
-    )
-    assert png.startswith(b"\x89PNG")
+    assert resultado.proveniencia.configuracao["tipo_material"] in ("apostila", "slides")
+    assert len(resultado.paginas) == 1

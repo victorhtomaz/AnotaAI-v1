@@ -1,9 +1,10 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from anotai.domain.entities.IntervaloExplicativo import IntervaloExplicativo
-from anotai.domain.entities.SegmentoTranscricao import SegmentoTranscricao
-from anotai.domain.value_objects.MetadadosAudio import MetadadosAudio
+from anotai.domain.value_objects import MetadadosAudio
+
+from .intervalo_explicativo import IntervaloExplicativo
+from .segmento_transcricao import SegmentoTranscricao
 
 
 @dataclass

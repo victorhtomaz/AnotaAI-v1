@@ -5,9 +5,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from anotai.application.ports.repositorio_anotacao import RepositorioAnotacao
-from anotai.domain.entities.Anotacao import Anotacao
-from anotai.domain.exceptions.ErroIntegridade import ErroIntegridade
-from anotai.domain.value_objects.IntervaloTempo import IntervaloTempo
+from anotai.domain.entities import Anotacao
+from anotai.domain.exceptions import ErroIntegridade
+from anotai.domain.value_objects import IntervaloTempo
 
 from .base import Base, criar_engine_sqlite
 from .modelo_anotacao import (
@@ -15,6 +15,7 @@ from .modelo_anotacao import (
     ModeloAnotacaoPagina,
     ModeloAnotacaoUnidade,
 )
+from .modelo_documento import ModeloUnidade
 
 
 class RepositorioAnotacaoSQLite(RepositorioAnotacao):
@@ -47,6 +48,7 @@ class RepositorioAnotacaoSQLite(RepositorioAnotacao):
                 ) from exc
 
     def _salvar_com_sessao(self, sessao: Session, anotacao: Anotacao) -> None:
+        self._validar_regras_negocio(sessao, anotacao)
         existente = sessao.get(ModeloAnotacao, anotacao.id_anotacao)
         if existente is not None:
             sessao.delete(existente)
@@ -83,6 +85,34 @@ class RepositorioAnotacaoSQLite(RepositorioAnotacao):
             )
 
         sessao.add(registro)
+
+    @classmethod
+    def _validar_regras_negocio(cls, sessao: Session, anotacao: Anotacao) -> None:
+        """Valida regras de negócio semânticas que o SQLite não valida via FK."""
+        if anotacao.ids_unidades:
+            decorativa = sessao.scalars(
+                select(ModeloUnidade.id).where(
+                    ModeloUnidade.id.in_(anotacao.ids_unidades),
+                    ModeloUnidade.eh_decorativa.is_(True),
+                )
+            ).first()
+            if decorativa:
+                raise ErroIntegridade(
+                    f"Unidade '{decorativa}' é marcada como decorativa e "
+                    "não pode participar de anotação"
+                )
+
+            inconsistente = sessao.scalars(
+                select(ModeloUnidade.id).where(
+                    ModeloUnidade.id.in_(anotacao.ids_unidades),
+                    ModeloUnidade.pagina_id.not_in(anotacao.ids_paginas),
+                )
+            ).first()
+            if inconsistente:
+                raise ErroIntegridade(
+                    f"Inconsistência hierárquica: unidade '{inconsistente}' pertence à página "
+                    "que não foi incluída em ids_paginas da anotação"
+                )
 
     def buscar_por_id(self, id_anotacao: str) -> Anotacao | None:
         with Session(self._engine) as sessao:

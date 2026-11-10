@@ -1,6 +1,6 @@
 from typing import Any, Protocol
 
-from anotai.domain.entities.Aula import Aula
+from anotai.domain.entities import Aula
 
 
 class RepositorioAula(Protocol):

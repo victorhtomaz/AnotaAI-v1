@@ -1,7 +1,6 @@
 from anotai.application.ports.indice_busca import IndiceBusca
-from anotai.domain.entities.Aula import Aula
-from anotai.domain.entities.Documento import Documento
-from anotai.domain.value_objects.EvidenciaRecuperacao import (
+from anotai.domain.entities import Aula, Documento
+from anotai.domain.value_objects import (
     CandidatoPagina,
     CandidatoUnidade,
     ResultadoRecuperacaoIntervalo,

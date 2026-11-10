@@ -1,4 +1,3 @@
-from .armazenamento_documento import ArmazenamentoDocumento
 from .base import Base, criar_engine_sqlite
 from .modelo_alinhamento import (
     ModeloAlinhamento,
@@ -20,10 +19,9 @@ from .modelo_documento import (
 from .repositorio_alinhamento_sqlite import RepositorioAlinhamentoSQLite
 from .repositorio_anotacao_sqlite import RepositorioAnotacaoSQLite
 from .repositorio_aula_sqlite import RepositorioAulaSQLite
-from .repositorio_documento import RepositorioDocumento
+from .repositorio_documento_sqlite import RepositorioDocumento, RepositorioDocumentoSQLite
 
 __all__ = [
-    "ArmazenamentoDocumento",
     "Base",
     "ModeloAlinhamento",
     "ModeloAlinhamentoPagina",
@@ -42,5 +40,6 @@ __all__ = [
     "RepositorioAnotacaoSQLite",
     "RepositorioAulaSQLite",
     "RepositorioDocumento",
+    "RepositorioDocumentoSQLite",
     "criar_engine_sqlite",
 ]

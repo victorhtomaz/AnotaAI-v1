@@ -1,6 +1,6 @@
 import pytest
 
-from anotai.domain.value_objects.IntervaloTempo import IntervaloTempo
+from anotai.domain.value_objects import IntervaloTempo
 
 
 def test_intervalo_tempo_valido() -> None:

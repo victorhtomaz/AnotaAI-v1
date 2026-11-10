@@ -8,20 +8,24 @@ from anotai.adapters.outbound.persistence import (
     RepositorioAulaSQLite,
     RepositorioDocumento,
 )
-from anotai.domain.entities.Alinhamento import Alinhamento
-from anotai.domain.entities.Anotacao import Anotacao
-from anotai.domain.entities.Aula import Aula
-from anotai.domain.entities.Documento import Documento, PaginaDocumento, UnidadeDocumento
-from anotai.domain.entities.IntervaloExplicativo import IntervaloExplicativo
-from anotai.domain.entities.SegmentoTranscricao import SegmentoTranscricao
-from anotai.domain.entities.ValidadorIntegridade import ValidadorIntegridade
-from anotai.domain.exceptions.ErroIntegridade import ErroIntegridade
-from anotai.domain.value_objects.CaixaDelimitadora import CaixaDelimitadora
-from anotai.domain.value_objects.IntervaloTempo import IntervaloTempo
-from anotai.domain.value_objects.MetadadosAudio import MetadadosAudio
-from anotai.domain.value_objects.ProvenienciaDocumento import ProvenienciaDocumento
-from anotai.domain.value_objects.TipoRelacao import (
+from anotai.domain.entities import (
+    Alinhamento,
+    Anotacao,
+    Aula,
+    Documento,
+    IntervaloExplicativo,
+    PaginaDocumento,
+    SegmentoTranscricao,
+    UnidadeDocumento,
+    ValidadorIntegridade,
+)
+from anotai.domain.exceptions import ErroIntegridade
+from anotai.domain.value_objects import (
+    CaixaDelimitadora,
+    IntervaloTempo,
+    MetadadosAudio,
     OrigemAlinhamento,
+    ProvenienciaDocumento,
     StatusAlinhamento,
     TipoRelacao,
 )
@@ -671,3 +675,189 @@ def test_repositorio_anotacao_ground_truth(tmp_path: Path) -> None:
     do_intervalo = repo_anotacao.listar_por_intervalo(aula.intervalos[0].id_intervalo)
     assert len(do_intervalo) == 1
     assert do_intervalo[0].id_anotacao == "anot-01"
+
+
+def test_reprocessar_aula_preserva_anotacoes_e_alinhamentos(tmp_path: Path) -> None:
+    banco = tmp_path / "teste_reprocessar.sqlite"
+    repo_doc = RepositorioDocumento(banco)
+    repo_aula = RepositorioAulaSQLite(banco)
+    repo_anotacao = RepositorioAnotacaoSQLite(banco)
+    repo_alinhamento = RepositorioAlinhamentoSQLite(banco)
+
+    doc = _criar_documento_teste("doc-rep")
+    repo_doc.salvar(doc)
+
+    aula = _criar_aula_teste("aula-rep")
+    repo_aula.salvar(aula)
+
+    anotacao = Anotacao(
+        id_anotacao="anot-rep-1",
+        id_aula=aula.id_aula,
+        id_documento=doc.id_documento,
+        intervalo=IntervaloTempo(0.0, 5.0),
+        id_intervalo=aula.intervalos[0].id_intervalo,
+        ids_paginas=[doc.paginas[0].id_pagina],
+        ids_unidades=[doc.paginas[0].unidades[0].id_unidade],
+        tipo_relacao="direct",
+        versao="gt-v1",
+    )
+    repo_anotacao.salvar(anotacao)
+
+    alinhamento = Alinhamento(
+        id_alinhamento="align-rep-1",
+        id_aula=aula.id_aula,
+        id_documento=doc.id_documento,
+        id_intervalo=aula.intervalos[0].id_intervalo,
+        ids_paginas=[doc.paginas[0].id_pagina],
+        ids_unidades=[doc.paginas[0].unidades[0].id_unidade],
+        status="aligned",
+        tipo_relacao="direct",
+        confianca=0.95,
+        estrategia="bm25",
+    )
+    repo_alinhamento.salvar(alinhamento)
+
+    # Re-salva/reprocessa a aula
+    aula_atualizada = _criar_aula_teste("aula-rep")
+    aula_atualizada.titulo = "Aula Reprocessada com Novos Parâmetros"
+    repo_aula.salvar(aula_atualizada)
+
+    # Anotações e alinhamentos associados à aula NÃO devem ter sido apagados em cascata!
+    assert repo_anotacao.buscar_por_id("anot-rep-1") is not None
+    assert repo_alinhamento.buscar_por_id("align-rep-1") is not None
+
+    aula_rec = repo_aula.buscar_por_id(aula.id_aula)
+    assert aula_rec is not None
+    assert aula_rec.titulo == "Aula Reprocessada com Novos Parâmetros"
+
+
+def test_reprocessar_documento_preserva_anotacoes_e_alinhamentos(tmp_path: Path) -> None:
+    banco = tmp_path / "teste_reprocessar_doc.sqlite"
+    repo_doc = RepositorioDocumento(banco)
+    repo_aula = RepositorioAulaSQLite(banco)
+    repo_anotacao = RepositorioAnotacaoSQLite(banco)
+    repo_alinhamento = RepositorioAlinhamentoSQLite(banco)
+
+    doc = _criar_documento_teste("doc-rep2")
+    repo_doc.salvar(doc)
+
+    aula = _criar_aula_teste("aula-rep2")
+    repo_aula.salvar(aula)
+
+    anotacao = Anotacao(
+        id_anotacao="anot-rep-2",
+        id_aula=aula.id_aula,
+        id_documento=doc.id_documento,
+        intervalo=IntervaloTempo(0.0, 5.0),
+        ids_paginas=[doc.paginas[0].id_pagina],
+        tipo_relacao="direct",
+        versao="gt-v1",
+    )
+    repo_anotacao.salvar(anotacao)
+
+    alinhamento = Alinhamento(
+        id_alinhamento="align-rep-2",
+        id_aula=aula.id_aula,
+        id_documento=doc.id_documento,
+        id_intervalo=aula.intervalos[0].id_intervalo,
+        ids_paginas=[doc.paginas[0].id_pagina],
+        status="aligned",
+        tipo_relacao="direct",
+        confianca=0.88,
+        estrategia="bm25",
+    )
+    repo_alinhamento.salvar(alinhamento)
+
+    # Re-salva/reprocessa o documento (ex: re-extração ou OCR)
+    doc_atualizado = _criar_documento_teste("doc-rep2")
+    doc_atualizado.titulo = "Documento Atualizado"
+    repo_doc.salvar(doc_atualizado)
+
+    # Anotações e alinhamentos associados ao documento NÃO devem ter sido apagados em cascata!
+    assert repo_anotacao.buscar_por_id("anot-rep-2") is not None
+    assert repo_alinhamento.buscar_por_id("align-rep-2") is not None
+
+    doc_rec = repo_doc.buscar_por_id(doc.id_documento)
+    assert doc_rec is not None
+    assert doc_rec.titulo == "Documento Atualizado"
+
+
+def test_repositorio_anotacao_rejeita_unidade_decorativa(tmp_path: Path) -> None:
+    banco = tmp_path / "teste_anot_validacao.sqlite"
+    repo_doc = RepositorioDocumento(banco)
+    repo_aula = RepositorioAulaSQLite(banco)
+    repo_anot = RepositorioAnotacaoSQLite(banco)
+
+    doc = _criar_documento_teste("doc-val")
+    # Marca unidade como decorativa
+    doc.paginas[0].unidades[0].eh_decorativa = True
+    repo_doc.salvar(doc)
+
+    aula = _criar_aula_teste("aula-val")
+    repo_aula.salvar(aula)
+
+    anot = Anotacao(
+        id_anotacao="anot-invalida-1",
+        id_aula=aula.id_aula,
+        id_documento=doc.id_documento,
+        intervalo=IntervaloTempo(0.0, 5.0),
+        ids_paginas=[doc.paginas[0].id_pagina],
+        ids_unidades=[doc.paginas[0].unidades[0].id_unidade],
+        tipo_relacao="direct",
+    )
+
+    with pytest.raises(ErroIntegridade, match="decorativa"):
+        repo_anot.salvar(anot)
+
+
+def test_repositorio_anotacao_rejeita_inconsistencia_hierarquica(tmp_path: Path) -> None:
+    banco = tmp_path / "teste_anot_hierarquia.sqlite"
+    repo_doc = RepositorioDocumento(banco)
+    repo_aula = RepositorioAulaSQLite(banco)
+    repo_anot = RepositorioAnotacaoSQLite(banco)
+
+    doc = _criar_documento_teste("doc-hier")
+    repo_doc.salvar(doc)
+
+    aula = _criar_aula_teste("aula-hier")
+    repo_aula.salvar(aula)
+
+    # Anotação inclui unidade da página 2, mas apenas a página 1 em ids_paginas
+    anot = Anotacao(
+        id_anotacao="anot-invalida-2",
+        id_aula=aula.id_aula,
+        id_documento=doc.id_documento,
+        intervalo=IntervaloTempo(0.0, 5.0),
+        ids_paginas=[doc.paginas[0].id_pagina],
+        ids_unidades=[doc.paginas[1].unidades[0].id_unidade],
+        tipo_relacao="direct",
+    )
+
+    with pytest.raises(ErroIntegridade, match="Inconsistência hierárquica"):
+        repo_anot.salvar(anot)
+
+
+def test_repositorios_buscar_por_termo_e_existe(tmp_path: Path) -> None:
+    banco = tmp_path / "teste_termo.sqlite"
+    repo_doc = RepositorioDocumento(banco)
+    repo_aula = RepositorioAulaSQLite(banco)
+
+    doc = _criar_documento_teste("doc-termo-abc")
+    doc.titulo = "Sistemas Inteligentes"
+    repo_doc.salvar(doc)
+
+    aula = _criar_aula_teste("aula-termo-xyz")
+    aula.titulo = "Introdução aos Agentes"
+    repo_aula.salvar(aula)
+
+    assert repo_doc.existe("doc-termo-abc")
+    assert not repo_doc.existe("doc-nao-existe")
+
+    # Busca por parte do ID ou título
+    res_doc = repo_doc.buscar_por_termo("inteligentes")
+    assert len(res_doc) == 1
+    assert res_doc[0][0] == "doc-termo-abc"
+
+    res_aula = repo_aula.buscar_por_termo("agentes")
+    assert len(res_aula) == 1
+    assert res_aula[0][0] == "aula-termo-xyz"

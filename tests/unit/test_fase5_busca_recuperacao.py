@@ -10,22 +10,26 @@ from anotai.adapters.outbound.ollama.provedor_embedding import ProvedorEmbedding
 from anotai.adapters.outbound.search import IndiceBM25, IndiceEmbeddings, IndiceHibrido
 from anotai.application.use_cases.recuperar_candidatos import RecuperarCandidatos
 from anotai.config import Settings
-from anotai.domain.entities.Aula import Aula
-from anotai.domain.entities.Documento import Documento, PaginaDocumento, UnidadeDocumento
-from anotai.domain.entities.IntervaloExplicativo import IntervaloExplicativo
-from anotai.domain.entities.SegmentoTranscricao import SegmentoTranscricao
-from anotai.domain.exceptions.ErroBusca import ErroBusca
-from anotai.domain.value_objects.CaixaDelimitadora import CaixaDelimitadora
-from anotai.domain.value_objects.EvidenciaRecuperacao import (
+from anotai.domain.entities import (
+    Aula,
+    Documento,
+    IntervaloExplicativo,
+    PaginaDocumento,
+    SegmentoTranscricao,
+    UnidadeDocumento,
+)
+from anotai.domain.exceptions import ErroBusca
+from anotai.domain.value_objects import (
+    CaixaDelimitadora,
     CandidatoPagina,
     CandidatoUnidade,
+    IntervaloTempo,
+    MetadadosAudio,
+    ProvenienciaDocumento,
     ResultadoRecuperacaoIntervalo,
     agregar_pontuacao_unidades,
     combinar_pontuacao_pagina,
 )
-from anotai.domain.value_objects.IntervaloTempo import IntervaloTempo
-from anotai.domain.value_objects.MetadadosAudio import MetadadosAudio
-from anotai.domain.value_objects.ProvenienciaDocumento import ProvenienciaDocumento
 
 
 def _criar_documento_teste(id_doc: str = "doc-teste") -> Documento:
@@ -306,6 +310,15 @@ def test_provedor_embedding_ollama() -> None:
     vetores = provedor.gerar_embeddings(["Texto um", "Texto dois"])
     assert len(vetores) == 2
     assert len(vetores[0]) == 3
+
+    # Teste de cache: quando o cliente passa a falhar, textos já em cache continuam retornando
+    cliente.falhar = True
+    vetores_cacheados = provedor.gerar_embeddings(["Texto um"])
+    assert vetores_cacheados == [vetores[0]]
+
+    # Novo texto não cacheado deve disparar erro
+    with pytest.raises(ErroBusca, match="Falha ao gerar embeddings"):
+        provedor.gerar_embeddings(["Novo texto sem cache"])
 
     assert provedor.gerar_embeddings([]) == []
 

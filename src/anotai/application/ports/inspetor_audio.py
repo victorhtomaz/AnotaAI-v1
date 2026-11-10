@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Protocol
 
-from anotai.domain.value_objects.MetadadosAudio import MetadadosAudio
+from anotai.domain.value_objects import MetadadosAudio
 
 
 class InspetorAudio(Protocol):

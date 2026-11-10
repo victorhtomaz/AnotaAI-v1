@@ -9,9 +9,13 @@ wheels/
 # Virtual environments
 .venv
 
-# Local environment variables
+# Local environment variables and databases
 .env
-anotaai.db
+*.db
+*.sqlite
+*.sqlite3
+data/processados/*.sqlite
+data/processados/transcricoes_brutas/*.json
 
 # Caches
 .ruff_cache/

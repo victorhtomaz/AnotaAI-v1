@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from anotai.domain.entities.Alinhamento import Alinhamento
+from anotai.domain.entities import Alinhamento
 
 
 class RepositorioAlinhamento(Protocol):

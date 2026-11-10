@@ -3,8 +3,8 @@ from pathlib import Path
 import pytest
 
 from anotai.application.use_cases.importar_audio import ImportarAudio
-from anotai.domain.exceptions.AudioInvalido import AudioInvalido
-from anotai.domain.value_objects.MetadadosAudio import MetadadosAudio
+from anotai.domain.exceptions import AudioInvalido
+from anotai.domain.value_objects import MetadadosAudio
 
 
 class InspetorAudioFake:

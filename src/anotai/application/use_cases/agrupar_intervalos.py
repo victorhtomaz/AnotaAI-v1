@@ -1,6 +1,5 @@
-from anotai.domain.entities.IntervaloExplicativo import IntervaloExplicativo
-from anotai.domain.entities.SegmentoTranscricao import SegmentoTranscricao
-from anotai.domain.value_objects.IntervaloTempo import IntervaloTempo
+from anotai.domain.entities import IntervaloExplicativo, SegmentoTranscricao
+from anotai.domain.value_objects import IntervaloTempo
 
 
 class AgrupadorIntervalos:
@@ -31,8 +30,12 @@ class AgrupadorIntervalos:
                 buffer.append(seg)
                 continue
 
-            duracao_buffer = buffer[-1].intervalo.fim - buffer[0].intervalo.inicio
-            duracao_com_novo = seg.intervalo.fim - buffer[0].intervalo.inicio
+            inicio_buffer = min(s.intervalo.inicio for s in buffer)
+            fim_buffer = max(s.intervalo.fim for s in buffer)
+            duracao_buffer = fim_buffer - inicio_buffer
+            duracao_com_novo = max(fim_buffer, seg.intervalo.fim) - min(
+                inicio_buffer, seg.intervalo.inicio
+            )
             silencio = seg.intervalo.inicio - buffer[-1].intervalo.fim
             ultimo_texto = buffer[-1].texto.rstrip()
             termina_sentenca = any(
@@ -62,8 +65,10 @@ class AgrupadorIntervalos:
         id_aula: str,
         ordem: int,
     ) -> IntervaloExplicativo:
-        inicio = buffer[0].intervalo.inicio
-        fim = buffer[-1].intervalo.fim
+        inicio = round(min(s.intervalo.inicio for s in buffer), 3)
+        fim = round(max(s.intervalo.fim for s in buffer), 3)
+        if fim <= inicio:
+            fim = round(inicio + 0.1, 3)
         texto = " ".join(s.texto.strip() for s in buffer if s.texto.strip())
         id_intervalo = f"interval-{id_aula}-{ordem:04d}"
 

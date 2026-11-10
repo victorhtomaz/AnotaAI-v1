@@ -1,7 +1,7 @@
 import hashlib
 from dataclasses import dataclass, field
 
-from anotai.domain.value_objects.TipoRelacao import (
+from anotai.domain.value_objects import (
     OrigemAlinhamento,
     StatusAlinhamento,
     TipoRelacao,

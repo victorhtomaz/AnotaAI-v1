@@ -3,15 +3,16 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from anotai.application.ports.repositorio_aula import RepositorioAula
-from anotai.domain.entities.Aula import Aula
-from anotai.domain.entities.IntervaloExplicativo import IntervaloExplicativo
-from anotai.domain.entities.SegmentoTranscricao import SegmentoTranscricao
-from anotai.domain.entities.ValidadorIntegridade import ValidadorIntegridade
-from anotai.domain.value_objects.IntervaloTempo import IntervaloTempo
-from anotai.domain.value_objects.MetadadosAudio import MetadadosAudio
+from anotai.domain.entities import (
+    Aula,
+    IntervaloExplicativo,
+    SegmentoTranscricao,
+    ValidadorIntegridade,
+)
+from anotai.domain.value_objects import IntervaloTempo, MetadadosAudio
 
 from .base import Base, criar_engine_sqlite
 from .modelo_aula import ModeloAula, ModeloIntervaloExplicativo, ModeloSegmentoTranscricao
@@ -27,29 +28,42 @@ class RepositorioAulaSQLite(RepositorioAula):
         ValidadorIntegridade.validar_aula(aula)
 
         with Session(self._engine) as sessao:
-            existente = sessao.get(ModeloAula, aula.id_aula)
-            if existente is not None:
-                sessao.delete(existente)
-                sessao.flush()
-
             carga_json = (
                 json.dumps(carga_bruta_asr, ensure_ascii=False) if carga_bruta_asr else None
             )
 
-            registro_aula = ModeloAula(
-                id=aula.id_aula,
-                titulo=aula.titulo,
-                uri_origem=aula.uri_origem,
-                duracao=aula.metadados.duracao,
-                taxa_amostragem=aula.metadados.taxa_amostragem,
-                canais=aula.metadados.canais,
-                formato=aula.metadados.formato,
-                codec=aula.metadados.codec,
-                taxa_bits=aula.metadados.taxa_bits,
-                idioma=aula.idioma,
-                versao_processamento=aula.versao_processamento,
-                carga_bruta_asr=carga_json,
-            )
+            existente = sessao.get(ModeloAula, aula.id_aula)
+            if existente is not None:
+                existente.titulo = aula.titulo
+                existente.uri_origem = aula.uri_origem
+                existente.duracao = aula.metadados.duracao
+                existente.taxa_amostragem = aula.metadados.taxa_amostragem
+                existente.canais = aula.metadados.canais
+                existente.formato = aula.metadados.formato
+                existente.codec = aula.metadados.codec
+                existente.taxa_bits = aula.metadados.taxa_bits
+                existente.idioma = aula.idioma
+                existente.versao_processamento = aula.versao_processamento
+                existente.carga_bruta_asr = carga_json
+                existente.segmentos.clear()
+                existente.intervalos.clear()
+                registro_aula = existente
+            else:
+                registro_aula = ModeloAula(
+                    id=aula.id_aula,
+                    titulo=aula.titulo,
+                    uri_origem=aula.uri_origem,
+                    duracao=aula.metadados.duracao,
+                    taxa_amostragem=aula.metadados.taxa_amostragem,
+                    canais=aula.metadados.canais,
+                    formato=aula.metadados.formato,
+                    codec=aula.metadados.codec,
+                    taxa_bits=aula.metadados.taxa_bits,
+                    idioma=aula.idioma,
+                    versao_processamento=aula.versao_processamento,
+                    carga_bruta_asr=carga_json,
+                )
+                sessao.add(registro_aula)
 
             for seg in aula.segmentos:
                 palavras = json.dumps(seg.palavras, ensure_ascii=False) if seg.palavras else None
@@ -87,16 +101,40 @@ class RepositorioAulaSQLite(RepositorioAula):
 
     def buscar_por_id(self, id_aula: str) -> Aula | None:
         with Session(self._engine) as sessao:
-            registro = sessao.get(ModeloAula, id_aula)
+            stmt = (
+                select(ModeloAula)
+                .where(ModeloAula.id == id_aula)
+                .options(
+                    selectinload(ModeloAula.segmentos),
+                    selectinload(ModeloAula.intervalos),
+                )
+            )
+            registro = sessao.scalars(stmt).first()
             if registro is None:
                 return None
             return self._mapear_para_dominio(registro)
 
     def listar(self) -> list[Aula]:
         with Session(self._engine) as sessao:
-            stmt = select(ModeloAula).order_by(ModeloAula.titulo)
+            stmt = (
+                select(ModeloAula)
+                .options(
+                    selectinload(ModeloAula.segmentos),
+                    selectinload(ModeloAula.intervalos),
+                )
+                .order_by(ModeloAula.titulo)
+            )
             registros = sessao.scalars(stmt).all()
             return [self._mapear_para_dominio(r) for r in registros]
+
+    def buscar_por_termo(self, termo: str) -> list[tuple[str, str]]:
+        termo_limpo = termo.strip()
+        with Session(self._engine) as sessao:
+            stmt = select(ModeloAula.id, ModeloAula.titulo).where(
+                (ModeloAula.id.contains(termo_limpo))
+                | (ModeloAula.titulo.ilike(f"%{termo_limpo}%"))
+            )
+            return [(row[0], row[1]) for row in sessao.execute(stmt)]
 
     @staticmethod
     def _mapear_para_dominio(registro: ModeloAula) -> Aula:

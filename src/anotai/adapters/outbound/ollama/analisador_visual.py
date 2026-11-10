@@ -5,8 +5,8 @@ from typing import Any, Protocol
 
 from ollama import ResponseError
 
-from anotai.domain.entities.Documento import UnidadeDocumento
-from anotai.domain.exceptions.ErroAnaliseVisual import ErroAnaliseVisual
+from anotai.domain.entities import UnidadeDocumento
+from anotai.domain.exceptions import ErroAnaliseVisual
 
 logger = logging.getLogger(__name__)
 

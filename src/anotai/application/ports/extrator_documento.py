@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Protocol
 
-from anotai.domain.entities.Documento import Documento
+from anotai.domain.entities import Documento
 
 
 class ExtratorDocumento(Protocol):

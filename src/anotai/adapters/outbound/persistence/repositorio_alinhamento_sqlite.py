@@ -6,8 +6,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from anotai.application.ports.repositorio_alinhamento import RepositorioAlinhamento
-from anotai.domain.entities.Alinhamento import Alinhamento
-from anotai.domain.exceptions.ErroIntegridade import ErroIntegridade
+from anotai.domain.entities import Alinhamento
+from anotai.domain.exceptions import ErroIntegridade
 
 from .base import Base, criar_engine_sqlite
 from .modelo_alinhamento import (

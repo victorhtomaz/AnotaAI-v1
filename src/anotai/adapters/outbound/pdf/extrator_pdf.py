@@ -9,11 +9,9 @@ from typing import Any
 import pymupdf
 
 from anotai.application.ports import AnalisadorVisual
-from anotai.domain.entities.Documento import Documento, PaginaDocumento, UnidadeDocumento
-from anotai.domain.exceptions.DocumentoInvalido import DocumentoInvalido
-from anotai.domain.exceptions.MetodoExtracaoNaoSuportado import MetodoExtracaoNaoSuportado
-from anotai.domain.value_objects.CaixaDelimitadora import CaixaDelimitadora
-from anotai.domain.value_objects.ProvenienciaDocumento import ProvenienciaDocumento
+from anotai.domain.entities import Documento, PaginaDocumento, UnidadeDocumento
+from anotai.domain.exceptions import DocumentoInvalido, MetodoExtracaoNaoSuportado
+from anotai.domain.value_objects import CaixaDelimitadora, ProvenienciaDocumento
 
 from .imagens import (
     DIMENSAO_MINIMA_IMAGEM_PX,
@@ -36,12 +34,9 @@ from .imagens import (
     renderizar_pagina_png,
 )
 from .normalizacao import (
-    SecaoBrutaPdf,
     limpar_texto_pagina,
     normalizar_conteudo_extraido,
 )
-from .secoes_sumario import extrair_secoes_do_sumario
-from .secoes_tipograficas import detectar_secoes_tipograficas
 from .unidades import segmentar_unidades_pagina
 
 PIPELINE_VERSION = "v1"
@@ -121,14 +116,6 @@ class ExtratorPDF:
             return "slides"
         return "apostila"
 
-    @staticmethod
-    def extrair_secoes(doc: pymupdf.Document) -> list[SecaoBrutaPdf]:
-        total_paginas = doc.page_count
-        toc = doc.get_toc(simple=True) or []
-        if toc:
-            return extrair_secoes_do_sumario(toc, total_paginas)
-        return detectar_secoes_tipograficas(doc, total_paginas)
-
     def extrair(self, caminho: Path, metodo: str = "native_then_ocr") -> Documento:
         if metodo not in METODOS:
             raise MetodoExtracaoNaoSuportado(metodo)
@@ -137,7 +124,6 @@ class ExtratorPDF:
         try:
             documento_id = f"doc-{hashlib.sha256(str(caminho.resolve()).encode()).hexdigest()[:16]}"
             tipo_material = self._inferir_tipo_material(pdf)
-            secoes = self.extrair_secoes(pdf)
             paginas_brutas = self._extrair_estrutura_bruta(pdf, documento_id)
         finally:
             pdf.close()
@@ -162,7 +148,6 @@ class ExtratorPDF:
                 configuracao={
                     "ocr_escopo": "elementos_visuais",
                     "tipo_material": tipo_material,
-                    "secoes_detectadas": str(len(secoes)),
                 },
                 prompt=getattr(self._analisador_visual, "prompt", None),
                 executado_em=datetime.now(UTC).isoformat(),

@@ -9,7 +9,7 @@ from anotai.adapters.outbound.audio import InspetorFFmpeg, ProvedorWhisperX
 from anotai.adapters.outbound.persistence import RepositorioAulaSQLite
 from anotai.application.use_cases import AgrupadorIntervalos, TranscreverAula
 from anotai.config import Settings
-from anotai.domain.exceptions.ErroAudio import ErroAudio
+from anotai.domain.exceptions import ErroAudio, ErroIntegridade
 
 
 def configurar_parser_transcrever(subparsers: argparse._SubParsersAction) -> None:
@@ -80,7 +80,7 @@ def executar_comando_transcrever(
 
     try:
         aula = caso_uso.executar(args.audio, titulo=args.title)
-    except ErroAudio as exc:
+    except (ErroAudio, ErroIntegridade) as exc:
         print(f"Erro na transcrição de áudio: {exc}", file=sys.stderr)
         return 1
 

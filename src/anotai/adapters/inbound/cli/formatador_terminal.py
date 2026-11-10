@@ -1,6 +1,5 @@
-from anotai.domain.entities.Aula import Aula
-from anotai.domain.entities.Documento import Documento
-from anotai.domain.value_objects.EvidenciaRecuperacao import ResultadoRecuperacaoIntervalo
+from anotai.domain.entities import Aula, Documento
+from anotai.domain.value_objects import ResultadoRecuperacaoIntervalo
 
 
 def formatar_aula_texto(

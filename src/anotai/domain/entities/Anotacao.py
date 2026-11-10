@@ -1,8 +1,7 @@
 import hashlib
 from dataclasses import dataclass, field
 
-from anotai.domain.value_objects.IntervaloTempo import IntervaloTempo
-from anotai.domain.value_objects.TipoRelacao import TipoRelacao
+from anotai.domain.value_objects import IntervaloTempo, TipoRelacao
 
 
 @dataclass

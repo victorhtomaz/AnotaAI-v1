@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from anotai.domain.entities.Anotacao import Anotacao
+from anotai.domain.entities import Anotacao
 
 
 class RepositorioAnotacao(Protocol):

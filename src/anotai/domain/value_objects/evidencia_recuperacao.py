@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from anotai.domain.value_objects.IntervaloTempo import IntervaloTempo
+from .intervalo_tempo import IntervaloTempo
 
 
 def agregar_pontuacao_unidades(pontuacoes: Sequence[float]) -> float:

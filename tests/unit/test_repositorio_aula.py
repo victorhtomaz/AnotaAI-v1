@@ -1,11 +1,8 @@
 from pathlib import Path
 
 from anotai.adapters.outbound.persistence.repositorio_aula_sqlite import RepositorioAulaSQLite
-from anotai.domain.entities.Aula import Aula
-from anotai.domain.entities.IntervaloExplicativo import IntervaloExplicativo
-from anotai.domain.entities.SegmentoTranscricao import SegmentoTranscricao
-from anotai.domain.value_objects.IntervaloTempo import IntervaloTempo
-from anotai.domain.value_objects.MetadadosAudio import MetadadosAudio
+from anotai.domain.entities import Aula, IntervaloExplicativo, SegmentoTranscricao
+from anotai.domain.value_objects import IntervaloTempo, MetadadosAudio
 
 
 def test_repositorio_aula_salvar_e_buscar(tmp_path: Path) -> None:

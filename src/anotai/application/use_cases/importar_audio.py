@@ -2,8 +2,8 @@ import hashlib
 from pathlib import Path
 
 from anotai.application.ports.inspetor_audio import InspetorAudio
-from anotai.domain.entities.Aula import Aula
-from anotai.domain.exceptions.AudioInvalido import AudioInvalido
+from anotai.domain.entities import Aula
+from anotai.domain.exceptions import AudioInvalido
 
 EXTENSOES_SUPORTADAS = {
     ".wav",

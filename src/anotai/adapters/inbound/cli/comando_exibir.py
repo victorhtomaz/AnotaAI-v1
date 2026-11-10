@@ -35,22 +35,42 @@ def executar_comando_exibir(
     repositorio = repo_cls(Path(settings.database_path))
     aula = repositorio.buscar_por_id(args.id_aula)
     if aula is None:
-        aulas = repositorio.listar()
-        matches = [
-            a
-            for a in aulas
-            if args.id_aula in a.id_aula or args.id_aula.lower() in a.titulo.lower()
-        ]
-        if len(matches) == 1:
-            aula = matches[0]
-        elif len(matches) > 1:
-            print(f"Múltiplas aulas encontradas para '{args.id_aula}':", file=sys.stderr)
-            for m in matches:
-                print(f"  - {m.id_aula} ({m.titulo})", file=sys.stderr)
-            return 1
+        if hasattr(repositorio, "buscar_por_termo"):
+            matches_tuplas = repositorio.buscar_por_termo(args.id_aula)
+            if len(matches_tuplas) == 1:
+                aula = repositorio.buscar_por_id(matches_tuplas[0][0])
+            elif len(matches_tuplas) > 1:
+                print(f"Múltiplas aulas encontradas para '{args.id_aula}':", file=sys.stderr)
+                for m_id, m_titulo in matches_tuplas:
+                    print(f"  - {m_id} ({m_titulo})", file=sys.stderr)
+                return 1
+            else:
+                print(f"Aula '{args.id_aula}' não encontrada no banco de dados.", file=sys.stderr)
+                return 1
         else:
-            print(f"Aula '{args.id_aula}' não encontrada no banco de dados.", file=sys.stderr)
-            return 1
+            aulas = repositorio.listar()
+            matches = [
+                a
+                for a in aulas
+                if args.id_aula in a.id_aula or args.id_aula.lower() in a.titulo.lower()
+            ]
+            if len(matches) == 1:
+                aula = matches[0]
+            elif len(matches) > 1:
+                print(f"Múltiplas aulas encontradas para '{args.id_aula}':", file=sys.stderr)
+                for m in matches:
+                    print(f"  - {m.id_aula} ({m.titulo})", file=sys.stderr)
+                return 1
+            else:
+                print(f"Aula '{args.id_aula}' não encontrada no banco de dados.", file=sys.stderr)
+                return 1
+
+    if args.intervalo is not None and not any(i.ordem == args.intervalo for i in aula.intervalos):
+        print(
+            f"Aviso: Intervalo explicativo #{args.intervalo} não encontrado na aula.",
+            file=sys.stderr,
+        )
+        return 1
 
     print(formatar_aula_texto(aula, detalhado=args.verbose, intervalo_alvo=args.intervalo))
     return 0

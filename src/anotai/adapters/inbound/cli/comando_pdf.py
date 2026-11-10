@@ -2,15 +2,16 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from ollama import Client
 
 from anotai.adapters.outbound.ollama import AnalisadorVisualOllama
 from anotai.adapters.outbound.pdf import ExtratorPDF
-from anotai.adapters.outbound.persistence import ArmazenamentoDocumento
+from anotai.adapters.outbound.persistence import RepositorioDocumentoSQLite
 from anotai.application.use_cases import ImportarDocumento
 from anotai.config import Settings
-from anotai.domain.exceptions.ErroProcessamentoDocumento import ErroProcessamentoDocumento
+from anotai.domain.exceptions import ErroIntegridade, ErroProcessamentoDocumento
 
 
 def configurar_parser_pdf(subparsers: argparse._SubParsersAction) -> None:
@@ -24,7 +25,13 @@ def configurar_parser_pdf(subparsers: argparse._SubParsersAction) -> None:
     )
 
 
-def executar_comando_pdf(args: argparse.Namespace, settings: Settings) -> int:
+def executar_comando_pdf(
+    args: argparse.Namespace,
+    settings: Settings,
+    repo_cls: Any = RepositorioDocumentoSQLite,
+    importar_cls: Any = ImportarDocumento,
+    extrator_cls: Any = ExtratorPDF,
+) -> int:
     analisador = None
     if args.method == "native_then_ocr":
         analisador = AnalisadorVisualOllama(
@@ -35,10 +42,14 @@ def executar_comando_pdf(args: argparse.Namespace, settings: Settings) -> int:
             pensar=settings.visual_think,
             manter_vivo=settings.ollama_keep_alive,
         )
+
+    banco_path = Path(settings.database_path)
+    repositorio = repo_cls(banco_path)
+    caso_uso = importar_cls(extrator_cls(analisador), repositorio=repositorio)
+
     try:
-        documento = ImportarDocumento(ExtratorPDF(analisador)).executar(args.pdf, args.method)
-        destino = ArmazenamentoDocumento(Path(settings.database_path)).salvar(documento)
-    except ErroProcessamentoDocumento as exc:
+        documento = caso_uso.executar(args.pdf, args.method)
+    except (ErroProcessamentoDocumento, ErroIntegridade) as exc:
         print(f"Erro ao processar PDF: {exc}", file=sys.stderr)
         return 1
 
@@ -49,7 +60,7 @@ def executar_comando_pdf(args: argparse.Namespace, settings: Settings) -> int:
                 "pages": len(documento.paginas),
                 "units": sum(len(pagina.unidades) for pagina in documento.paginas),
                 "processing_version": documento.versao_processamento,
-                "processed_path": str(destino),
+                "processed_path": str(banco_path),
             },
             ensure_ascii=False,
         )

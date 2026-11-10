@@ -4,8 +4,8 @@ import subprocess
 from pathlib import Path
 
 from anotai.application.ports.inspetor_audio import InspetorAudio
-from anotai.domain.exceptions.AudioInvalido import AudioInvalido
-from anotai.domain.value_objects.MetadadosAudio import MetadadosAudio
+from anotai.domain.exceptions import AudioInvalido
+from anotai.domain.value_objects import MetadadosAudio
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,11 @@ class InspetorFFmpeg(InspetorAudio):
             resultado = subprocess.run(cmd, capture_output=True, text=True, check=True)
             dados = json.loads(resultado.stdout)
         except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as exc:
-            raise AudioInvalido(f"falha ao inspecionar áudio com ffprobe: {exc}") from exc
+            detalhe = getattr(exc, "stderr", "") or ""
+            msg = f"falha ao inspecionar áudio com ffprobe: {exc}"
+            if detalhe:
+                msg += f" ({detalhe.strip()})"
+            raise AudioInvalido(msg) from exc
 
         formato_info = dados.get("format", {})
         streams = dados.get("streams", [])
@@ -128,6 +132,10 @@ class InspetorFFmpeg(InspetorAudio):
         try:
             subprocess.run(cmd, capture_output=True, text=True, check=True)
         except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-            raise AudioInvalido(f"falha ao converter áudio com ffmpeg: {exc}") from exc
+            detalhe = getattr(exc, "stderr", "") or ""
+            msg = f"falha ao converter áudio com ffmpeg: {exc}"
+            if detalhe:
+                msg += f" ({detalhe.strip()})"
+            raise AudioInvalido(msg) from exc
 
         return caminho_destino

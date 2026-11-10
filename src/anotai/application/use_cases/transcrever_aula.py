@@ -8,9 +8,8 @@ from anotai.application.ports.provedor_transcricao import ProvedorTranscricao
 from anotai.application.ports.repositorio_aula import RepositorioAula
 from anotai.application.use_cases.agrupar_intervalos import AgrupadorIntervalos
 from anotai.application.use_cases.importar_audio import ImportarAudio
-from anotai.domain.entities.Aula import Aula
-from anotai.domain.entities.SegmentoTranscricao import SegmentoTranscricao
-from anotai.domain.value_objects.IntervaloTempo import IntervaloTempo
+from anotai.domain.entities import Aula, SegmentoTranscricao
+from anotai.domain.value_objects import IntervaloTempo
 
 logger = logging.getLogger(__name__)
 

@@ -1,17 +1,21 @@
-from .AudioInvalido import AudioInvalido
-from .DocumentoInvalido import DocumentoInvalido
-from .ErroAnaliseVisual import ErroAnaliseVisual
-from .ErroAudio import ErroAudio
-from .ErroBusca import ErroBusca
-from .ErroIntegridade import ErroIntegridade
-from .ErroProcessamentoDocumento import ErroProcessamentoDocumento
-from .ErroTranscricao import ErroTranscricao
-from .MetodoExtracaoNaoSuportado import MetodoExtracaoNaoSuportado
+from .excecoes import (
+    AudioInvalido,
+    DocumentoInvalido,
+    ErroAnaliseVisual,
+    ErroAnotaAI,
+    ErroAudio,
+    ErroBusca,
+    ErroIntegridade,
+    ErroProcessamentoDocumento,
+    ErroTranscricao,
+    MetodoExtracaoNaoSuportado,
+)
 
 __all__ = [
     "AudioInvalido",
     "DocumentoInvalido",
     "ErroAnaliseVisual",
+    "ErroAnotaAI",
     "ErroAudio",
     "ErroBusca",
     "ErroIntegridade",

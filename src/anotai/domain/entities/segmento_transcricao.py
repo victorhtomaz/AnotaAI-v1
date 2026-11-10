@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from anotai.domain.value_objects.IntervaloTempo import IntervaloTempo
+from anotai.domain.value_objects import IntervaloTempo
 
 
 @dataclass

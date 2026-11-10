@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from anotai.domain.entities.Documento import Documento
+from anotai.domain.entities import Documento
 
 
 class RepositorioDocumento(Protocol):

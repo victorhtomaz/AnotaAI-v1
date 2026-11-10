@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pymupdf as fitz
 
-from anotai.domain.value_objects.CaixaDelimitadora import CaixaDelimitadora
+from anotai.domain.value_objects import CaixaDelimitadora
 
 DIMENSAO_MINIMA_IMAGEM_PX = 64
 PROPORCAO_AREA_MINIMA_IMAGEM = 0.02
