@@ -1,0 +1,176 @@
+{
+  "id_aula": "aula-b476189d82a5",
+  "titulo": "2026-10-29 17-04-16",
+  "uri_origem": "C:\\Users\\victo\\Videos\\2026-10-29 17-04-16.mkv",
+  "idioma": "pt",
+  "duracao_audio": 641.038,
+  "quantidade_segmentos": 27,
+  "quantidade_intervalos": 23,
+  "carga_bruta_asr": {
+    "segments": [
+      {
+        "text": " Olá, boa tarde, meu nome é Ana Beatriz Tomaz Oliveira e eu vou apresentar hoje o meu projeto de mestrado intitulado Evolução e Taxonomia dos Cacholotes Anão e Pigmeu, gênero COGE, a partir de mitogenomas, que é orientado pela professora doutora Aide Andrade Cunha.",
+        "start": 0.031,
+        "end": 17.429,
+        "avg_logprob": -0.07266565959855735
+      },
+      {
+        "text": " Bom, as duas espécies alvo do trabalho são as espécies que compõem o gênero koja, que é um gênero composto por duas espécies de odotocetos que são morfologicamente semelhantes, por isso elas são tidas como espécies semiclípticas, devido a essa característica em comum. E aí a gente tem a koja brevíceps, que é a cachalote pigmeu, e a koja cima, que é a cachalote anão.",
+        "start": 19.083,
+        "end": 48.057,
+        "avg_logprob": -0.08022103610077524
+      },
+      {
+        "text": " E aí existem algumas características de diagnose dessas duas espécies, que são a cor acinzentada na parte dorsal e a cor mais branca na parte ventral. O melão triangular, que é bem parecido também com as cachalotes originais, a physeter macrocephalus, é a mandíbula inferior menor do que a superior e a presença de",
+        "start": 49.188,
+        "end": 77.42,
+        "avg_logprob": -0.07751317555645862
+      },
+      {
+        "text": " uma mancha atrás dos olhos que simula falsas guelras, que acaba que essas espécies sejam facilmente confundidas com tubarões. E as características que diferem uma das outras são principalmente o comprimento, já que a cachalote pigmeu pode chegar a 4,30m de comprimento, enquanto a cachalote anã chega no máximo a 2,70m.",
+        "start": 77.42,
+        "end": 104.453,
+        "avg_logprob": -0.053869911881033766
+      },
+      {
+        "text": " Uma característica de diferenciação também é a tamanho e a posição da nadadeira dorsal, que já na córdia pré-bíceps ela é mais localizada na parte posterior do dorso e menor em relação ao corpo, enquanto na cacholote anão ela é maior e mais centralizada.",
+        "start": 104.453,
+        "end": 126.104,
+        "avg_logprob": -0.10902518901362349
+      },
+      {
+        "text": " E também uma característica, que eu estou falando muita característica, também uma característica de identificação é a variação numérica de dentes inferiores, já que por ser maior e depender de comer presas maiores também, a córdia brevíceps tem um número maior na arcada dentária. E aí, falando um pouco sobre a sua distribuição geográfica,",
+        "start": 126.104,
+        "end": 155.686,
+        "avg_logprob": -0.07983118124391841
+      },
+      {
+        "text": " Elas se sobrepõem na maior parte da sua distribuição, em azul é a distribuição de cogebrevíceps, em amarelo a distribuição de cogecima e a parte em verde é a sobreposição dessas duas espécies. E elas são geralmente associadas a águas temperadas e tropicais.",
+        "start": 157.07,
+        "end": 176.83,
+        "avg_logprob": -0.09273538883630332
+      },
+      {
+        "text": " E é devido a essa ampla sobreposição de distribuição, é facilmente confundida essas duas espécies por serem encontradas nos mesmos locais.",
+        "start": 178.214,
+        "end": 193.098,
+        "avg_logprob": -0.05674341987622412
+      },
+      {
+        "text": " E aí falando um pouco sobre a genética num geral dessas espécies, existem dois trabalhos principais, aparentemente os únicos, que trabalham essas duas espécies",
+        "start": 193.958,
+        "end": 210.125,
+        "avg_logprob": -0.1141826923076923
+      },
+      {
+        "text": " em nível global, sendo o Genetic Variation of Koja Species with Preliminary Evidence for Two Species of Koja, sendo do Shivers e outros colaboradores, que foi publicado em 2005, que basicamente indicou uma diferenciação",
+        "start": 210.125,
+        "end": 230.223,
+        "avg_logprob": -0.08817997685185185
+      },
+      {
+        "text": " dentro da espécie Cogiacima, que formariam duas espécies separadas a partir da Cogiacima que vivia no Atlântico e das Cogiacima que viviam no Indo-Pacífico. E, recentemente, um estudo de Diploma e Colaboradores fez um estudo avaliando os indivíduos que habitam o Atlântico Sul",
+        "start": 231.37,
+        "end": 261.172,
+        "avg_logprob": -0.05512152752942509
+      },
+      {
+        "text": " e também indicou forte separação desses indivíduos a partir de genes mitocondriais, de citocromo B e de DELUP. Entretanto, esses dois estudos apresentam ausência de indivíduos do Atlântico Sudoeste, que é aqui basicamente a costa da América do Sul,",
+        "start": 261.661,
+        "end": 287.902,
+        "avg_logprob": -0.0989062523841858
+      },
+      {
+        "text": " e poucos indivíduos do Atlântico Sudeste, geralmente mais focados ali na África do Sul e não em outras regiões. Então, recentemente foi feito um estudo pelo nosso grupo de pesquisa no nosso laboratório, que incluiu as sequências de indivíduos que encalharam aqui no Atlântico Sudeste,",
+        "start": 287.902,
+        "end": 313.231,
+        "avg_logprob": -0.037881540740991745
+      },
+      {
+        "text": " E essas evidências que foram encontradas a partir das sequências que a gente conseguiu de City Bay e de The Loop, elas sugeriram essa alta diferenciação genética entre COS acima do Atlântico e COS acima do Indo-Pacífico.",
+        "start": 313.231,
+        "end": 328.351,
+        "avg_logprob": -0.06422525979578494
+      },
+      {
+        "text": " E aí falando um pouco sobre como vamos delimitar as espécies a partir desses genes mitocondriais, vai ser utilizado um critério de delimitação de espécies cetáceos a partir de mitogenomas que foi proposto por Morin em 2023. E é um fluxograma basicamente...",
+        "start": 328.351,
+        "end": 350.238,
+        "avg_logprob": -0.05138644450147387
+      },
+      {
+        "text": " baseado em limiares quantitativos que eles vão permitir padronizar essas decisões taxonômicas e ela é baseada em três métricas, que é a divergência líquida de Ney, que ele vai dizer basicamente em quanto tempo, em quão",
+        "start": 353.039,
+        "end": 369.577,
+        "avg_logprob": -0.05811347336065574
+      },
+      {
+        "text": " enquanto divergiram essas duas linhagens a partir do momento que elas se separaram, o percentual de diagnosticabilidade, que é a probabilidade de um indivíduo ser designado corretamente para cada linhagem que está sendo avaliada, e um número fixo de mutações físicas dentro do mitogenoma completo.",
+        "start": 369.965,
+        "end": 393.202,
+        "avg_logprob": -0.023880207538604738
+      },
+      {
+        "text": " Com isso, o objetivo do trabalho é revisar a taxonomia do gênero COJA, utilizando o genoma mitocondrial completo, incluindo localidades anteriormente não mostradas, seguindo os critérios propostos por Morin. E, nos objetivos específicos, é fornecer os dados genéticos inéditos para COJA bivíceps e COJA cima que habitam o Atlântico Sul, testar hipóteses de diferenciação específica de COJA cima,",
+        "start": 394.855,
+        "end": 420.083,
+        "avg_logprob": -0.08838315476541934
+      },
+      {
+        "text": " investigar a filografia do gênero a partir de dados mitogenômicos e aprofundar a investigação e caracterização morfológica craniana e externa para averiguar possíveis diferenciações entre o Atlântico e o Indo-Pacífico.",
+        "start": 420.083,
+        "end": 437.127,
+        "avg_logprob": -0.042086694690008315
+      },
+      {
+        "text": " Para isso, nos materiais e métodos, o acervo do laboratório conta com 50 amostras de indivíduos encalhados na costa brasileira, sendo eles 23 cos acima, 19 cos brevíceps e 8 indivíduos que não foram morfologicamente identificados. E para as análises posteriores, vão ser adicionadas sequências disponíveis no GIMBANK e também amostras de colaboradores brasileiros e estrangeiros do laboratório.",
+        "start": 437.127,
+        "end": 465.089,
+        "avg_logprob": -0.06328125233235567
+      },
+      {
+        "text": " Na parte laboratorial, vai ser feita a extração do DNA a partir de um protocolo de fenocloroforme, que foi adaptado pelo nosso laboratório com bides magnéticas. A PCR vai ser feita num termociclador, utilizando primers de mitogenoma de cetáceos propostos por Sasaki em 2005. E o sequenciamento vai ser utilizando o...",
+        "start": 466.169,
+        "end": 491.903,
+        "avg_logprob": -0.07048420116796598
+      },
+      {
+        "text": " o aparelho mini-ion de tecnologia Oxford Nanopore. Para análise de dados, vai ser feita a identificação molecular a partir do BLAST, o alinhamento e definição de aplote vai ser feito no MEGA e no DNASP, para que sejam feitos também a definição de...",
+        "start": 493.118,
+        "end": 517.199,
+        "avg_logprob": -0.135869562625885
+      },
+      {
+        "text": " Então, será possível observar a filografia desses indivíduos no Pop Art. Vai ser feita também a estruturação populacional no Alerquim com as populações previamente definidas. E também vai ser feito a... Esqueci o nome. É...",
+        "start": 519.68,
+        "end": 544.621,
+        "avg_logprob": -0.1014984606719408
+      },
+      {
+        "text": " Jesus. O tamanho efetivo populacional de ambas as espécies a partir do Migrate N. E a filogenia vai ser feita no EC3, definindo também o melhor relógio molecular para cada gene do metogenoma. E vai ser...",
+        "start": 546.173,
+        "end": 566.255,
+        "avg_logprob": -0.10210129169040713
+      },
+      {
+        "text": " visualizada no Fig Tree. E para os critérios de mooring vão ser utilizados o modelo Random Forest, que é basicamente um algoritmo que vai rodar várias árvores, centenas e milhares de árvores, que vai definir e vai ver a probabilidade de definir corretamente cada indivíduo dentro da sua própria linhagem.",
+        "start": 566.255,
+        "end": 592.917,
+        "avg_logprob": -0.06249999928187175
+      },
+      {
+        "text": " Com isso, os resultados que esperam se obter são os primeiros mitogenomas completos de COGE no Atlântico Sul, evidências robustas para confirmar a hipótese de especiação críptica em COGE acima e também evidências genéticas que possam ser úteis para a criação de estratégia de manejo dessas duas espécies.",
+        "start": 593.862,
+        "end": 615.243,
+        "avg_logprob": -0.03304776282642375
+      },
+      {
+        "text": " E também para próximos passos está sendo feita uma busca de estratégia para implementar o uso de DNA nuclear na parte laboratorial e na análise de dados. E também espera-se fechar parcerias para obtenção de amostras inéditas. Muito obrigada.",
+        "start": 615.243,
+        "end": 641.028,
+        "avg_logprob": -0.04422883106575858
+      }
+    ],
+    "language": "pt"
+  }
+}

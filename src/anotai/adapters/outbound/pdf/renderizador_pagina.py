@@ -84,9 +84,7 @@ class RenderizadorPaginaPyMuPdf:
 
             if total_palavras_destacadas == 0 or not destacar_apenas_palavras:
                 for d in destaques:
-                    ret = (
-                        fitz.Rect(d.caixa.x0, d.caixa.y0, d.caixa.x1, d.caixa.y1) & pagina.rect
-                    )
+                    ret = fitz.Rect(d.caixa.x0, d.caixa.y0, d.caixa.x1, d.caixa.y1) & pagina.rect
                     if ret.is_empty:
                         continue
 

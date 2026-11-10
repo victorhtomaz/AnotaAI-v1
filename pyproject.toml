@@ -16,6 +16,9 @@ dependencies = [
     "whisperx>=3.8.6",
 ]
 
+[project.scripts]
+anotai = "anotai.adapters.inbound.cli.principal:main"
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",
@@ -25,6 +28,16 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
+torchaudio = { index = "pytorch" }
+torchvision = { index = "pytorch" }
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/anotai"]

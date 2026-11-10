@@ -135,9 +135,7 @@ class ExtratorPDF:
 
         pdf = self._abrir_documento_validado(caminho)
         try:
-            documento_id = (
-                f"doc-{hashlib.sha256(str(caminho.resolve()).encode()).hexdigest()[:16]}"
-            )
+            documento_id = f"doc-{hashlib.sha256(str(caminho.resolve()).encode()).hexdigest()[:16]}"
             tipo_material = self._inferir_tipo_material(pdf)
             secoes = self.extrair_secoes(pdf)
             paginas_brutas = self._extrair_estrutura_bruta(pdf, documento_id)

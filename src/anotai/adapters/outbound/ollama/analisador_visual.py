@@ -65,7 +65,7 @@ CHAVES_TEXTO_UNIDADE = (
     "content",
     "conteudo",
 )
-PROMPT_ANALISE_VISUAL_PADRAO = f"""Analise a imagem de um material didático (principalmente slides) \
+PROMPT_ANALISE_VISUAL_PADRAO = f"""Analise a imagem de material didático (especialmente slides) \
 e retorne somente um JSON válido, sem markdown nem comentários:
 {{"tipo": "conteudo" | "decorativo", "units": [{{"type": "<tipo>", "text": "<descrição>"}}]}}
 

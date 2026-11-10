@@ -1,56 +1,89 @@
 import argparse
-import json
-from pathlib import Path
+import sys
 
-from ollama import Client
-
-from anotai.adapters.outbound.ollama import AnalisadorVisualOllama
-from anotai.adapters.outbound.pdf import ExtratorPDF
-from anotai.adapters.outbound.persistence import ArmazenamentoDocumento
-from anotai.application.use_cases import ImportarDocumento
+from anotai.adapters.inbound.cli.comando_exibir import (
+    configurar_parser_exibir,
+    executar_comando_exibir,
+)
+from anotai.adapters.inbound.cli.comando_pdf import (
+    configurar_parser_pdf,
+    executar_comando_pdf,
+)
+from anotai.adapters.inbound.cli.comando_transcrever import (
+    configurar_parser_transcrever,
+    executar_comando_transcrever,
+)
+from anotai.adapters.inbound.cli.formatador_terminal import formatar_aula_texto
+from anotai.adapters.outbound.persistence import RepositorioAulaSQLite
+from anotai.application.use_cases import TranscreverAula
 from anotai.config import Settings
-from anotai.domain.exceptions.ErroProcessamentoDocumento import ErroProcessamentoDocumento
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Processa um PDF do AnotaAI.")
-    parser.add_argument("pdf", type=Path)
-    parser.add_argument(
-        "--method",
-        choices=("native", "native_then_ocr"),
-        default="native_then_ocr",
+def processar_pdf(args: argparse.Namespace, settings: Settings) -> int:
+    return executar_comando_pdf(args, settings)
+
+
+def transcrever_audio(args: argparse.Namespace, settings: Settings) -> int:
+    return executar_comando_transcrever(
+        args, settings, transcrever_cls=TranscreverAula, repo_cls=RepositorioAulaSQLite
     )
-    args = parser.parse_args()
+
+
+def exibir_aula(args: argparse.Namespace, settings: Settings) -> int:
+    return executar_comando_exibir(args, settings, repo_cls=RepositorioAulaSQLite)
+
+
+def criar_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="anotai",
+        description="AnotaAI — Alinhamento Temporal e Documental",
+    )
+    subparsers = parser.add_subparsers(dest="subcomando", help="Subcomandos disponíveis")
+
+    configurar_parser_pdf(subparsers)
+    configurar_parser_transcrever(subparsers)
+    configurar_parser_exibir(subparsers)
+
+    return parser
+
+
+def main(argumentos: list[str] | None = None) -> int:
     settings = Settings.from_environment()
-    analisador = None
-    if args.method == "native_then_ocr":
-        analisador = AnalisadorVisualOllama(
-            Client(host=settings.ollama_url),
-            settings.visual_model,
-            temperatura=settings.visual_temperature,
-            seed=settings.visual_seed,
-            pensar=settings.visual_think,
-            manter_vivo=settings.ollama_keep_alive,
-        )
-    try:
-        documento = ImportarDocumento(ExtratorPDF(analisador)).executar(args.pdf, args.method)
-        destino = ArmazenamentoDocumento(Path(settings.database_path)).salvar(documento)
-    except ErroProcessamentoDocumento as exc:
-        parser.error(str(exc))
-    print(
-        json.dumps(
-            {
-                "document_id": documento.id_documento,
-                "pages": len(documento.paginas),
-                "units": sum(len(pagina.unidades) for pagina in documento.paginas),
-                "processing_version": documento.versao_processamento,
-                "processed_path": str(destino),
-            },
-            ensure_ascii=False,
-        )
-    )
+    parser = criar_parser()
+
+    raw_args = sys.argv[1:] if argumentos is None else argumentos
+    if raw_args and raw_args[0] not in ("pdf", "transcrever", "exibir", "-h", "--help"):
+        if raw_args[0].lower().endswith(".pdf"):
+            raw_args = ["pdf", *raw_args]
+        elif any(
+            raw_args[0].lower().endswith(ext)
+            for ext in (".wav", ".mp3", ".m4a", ".mp4", ".mkv", ".webm")
+        ):
+            raw_args = ["transcrever", *raw_args]
+
+    args = parser.parse_args(raw_args)
+
+    if args.subcomando == "pdf":
+        return processar_pdf(args, settings)
+    if args.subcomando == "transcrever":
+        return transcrever_audio(args, settings)
+    if args.subcomando == "exibir":
+        return exibir_aula(args, settings)
+
+    parser.print_help()
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+__all__ = [
+    "RepositorioAulaSQLite",
+    "TranscreverAula",
+    "criar_parser",
+    "exibir_aula",
+    "formatar_aula_texto",
+    "main",
+    "processar_pdf",
+    "transcrever_audio",
+]

@@ -218,4 +218,3 @@ def test_normalizes_equivalent_visual_unit_types(tipo_bruto: str, tipo_esperado:
     assert resultado[0]["type"] == tipo_esperado
     assert resultado[0]["image_classification"] == "conteudo"
     assert resultado[0]["text"] == "Ilustração sem texto interno"
-

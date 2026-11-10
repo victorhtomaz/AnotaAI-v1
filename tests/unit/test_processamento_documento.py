@@ -357,4 +357,3 @@ def test_detects_sections_and_renders_page_with_highlights(tmp_path: Path) -> No
         palavras_chave=["Algoritmos"],
     )
     assert png.startswith(b"\x89PNG")
-
