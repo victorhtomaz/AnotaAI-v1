@@ -29,7 +29,9 @@ class Alinhamento:
         "bm25",
         "embedding",
         "temporal",
+        "temporal_hmm",
         "hierarchical",
+        "hierarchical_hmm",
         "hybrid",
         "manual",
     }

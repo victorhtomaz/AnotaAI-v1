@@ -2,9 +2,17 @@ from .caixa_delimitadora import CaixaDelimitadora
 from .evidencia_recuperacao import (
     CandidatoPagina,
     CandidatoUnidade,
+    ParametrosHMM,
+    PesosAlinhamento,
+    PontuacaoCandidatoAlinhamento,
+    ResultadoAlinhamentoIntervalo,
     ResultadoRecuperacaoIntervalo,
     agregar_pontuacao_unidades,
+    calcular_contexto_temporal_pagina,
+    calcular_evidencia_visual_pagina,
+    calcular_posteriores_hmm,
     combinar_pontuacao_pagina,
+    combinar_sinais_alinhamento,
 )
 from .intervalo_tempo import IntervaloTempo
 from .metadados_audio import MetadadosAudio
@@ -18,10 +26,18 @@ __all__ = [
     "IntervaloTempo",
     "MetadadosAudio",
     "OrigemAlinhamento",
+    "ParametrosHMM",
+    "PesosAlinhamento",
+    "PontuacaoCandidatoAlinhamento",
     "ProvenienciaDocumento",
+    "ResultadoAlinhamentoIntervalo",
     "ResultadoRecuperacaoIntervalo",
     "StatusAlinhamento",
     "TipoRelacao",
     "agregar_pontuacao_unidades",
+    "calcular_contexto_temporal_pagina",
+    "calcular_evidencia_visual_pagina",
+    "calcular_posteriores_hmm",
     "combinar_pontuacao_pagina",
+    "combinar_sinais_alinhamento",
 ]

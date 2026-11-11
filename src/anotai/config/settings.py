@@ -24,6 +24,18 @@ class Settings:
     interval_min_duration: float = 10.0
     interval_max_duration: float = 45.0
     abstention_threshold: float = 0.0
+    alignment_similarity_weight: float = 0.75
+    alignment_temporal_weight: float = 0.20
+    alignment_visual_weight: float = 0.05
+    alignment_temporal_window: int = 2
+    hmm_emission_temperature: float = 0.15
+    hmm_emission_floor: float = 0.01
+    hmm_abstention_emission_prior: float = 0.15
+    hmm_stay_weight: float = 1.0
+    hmm_adjacent_weight: float = 0.6
+    hmm_jump_base_weight: float = 0.15
+    hmm_jump_decay: float = 0.35
+    hmm_jump_floor: float = 0.02
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -62,5 +74,43 @@ class Settings:
             ),
             abstention_threshold=float(
                 os.getenv("ANOTAI_LIMIAR_ABSTENCAO", cls.abstention_threshold)
+            ),
+            alignment_similarity_weight=float(
+                os.getenv(
+                    "ANOTAI_ALINHAMENTO_PESO_SIMILARIDADE", cls.alignment_similarity_weight
+                )
+            ),
+            alignment_temporal_weight=float(
+                os.getenv("ANOTAI_ALINHAMENTO_PESO_TEMPORAL", cls.alignment_temporal_weight)
+            ),
+            alignment_visual_weight=float(
+                os.getenv("ANOTAI_ALINHAMENTO_PESO_VISUAL", cls.alignment_visual_weight)
+            ),
+            alignment_temporal_window=int(
+                os.getenv("ANOTAI_ALINHAMENTO_JANELA_TEMPORAL", cls.alignment_temporal_window)
+            ),
+            hmm_emission_temperature=float(
+                os.getenv("ANOTAI_HMM_TEMPERATURA_EMISSAO", cls.hmm_emission_temperature)
+            ),
+            hmm_emission_floor=float(
+                os.getenv("ANOTAI_HMM_PISO_EMISSAO", cls.hmm_emission_floor)
+            ),
+            hmm_abstention_emission_prior=float(
+                os.getenv("ANOTAI_HMM_PRIOR_ABSTENCAO", cls.hmm_abstention_emission_prior)
+            ),
+            hmm_stay_weight=float(
+                os.getenv("ANOTAI_HMM_PESO_PERMANENCIA", cls.hmm_stay_weight)
+            ),
+            hmm_adjacent_weight=float(
+                os.getenv("ANOTAI_HMM_PESO_ADJACENTE", cls.hmm_adjacent_weight)
+            ),
+            hmm_jump_base_weight=float(
+                os.getenv("ANOTAI_HMM_PESO_SALTO_BASE", cls.hmm_jump_base_weight)
+            ),
+            hmm_jump_decay=float(
+                os.getenv("ANOTAI_HMM_DECAIMENTO_SALTO", cls.hmm_jump_decay)
+            ),
+            hmm_jump_floor=float(
+                os.getenv("ANOTAI_HMM_PISO_SALTO", cls.hmm_jump_floor)
             ),
         )

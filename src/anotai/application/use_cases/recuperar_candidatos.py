@@ -57,9 +57,9 @@ class RecuperarCandidatos:
         consultas = [inter.texto for inter in aula.intervalos]
 
         # 2. Consultas em lote
-        k_paginas_amostra = len(documento.paginas)
+        k_paginas_amostra = max(len(documento.paginas), 1)
         res_paginas = self.indice_paginas.consultar_lote(consultas, top_k=k_paginas_amostra)
-        k_unidades_amostra = max(self.top_k_unidades * 3, 10)
+        k_unidades_amostra = max(len(itens_unidades), self.top_k_unidades * 3, 10)
         res_unidades = self.indice_unidades.consultar_lote(consultas, top_k=k_unidades_amostra)
 
         # 3. Consolidação e agregação de evidências por intervalo

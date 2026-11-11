@@ -1,5 +1,9 @@
 from anotai.domain.entities import Aula, Documento
-from anotai.domain.value_objects import ResultadoRecuperacaoIntervalo
+from anotai.domain.value_objects import (
+    ResultadoAlinhamentoIntervalo,
+    ResultadoRecuperacaoIntervalo,
+    StatusAlinhamento,
+)
 
 
 def formatar_aula_texto(
@@ -101,6 +105,63 @@ def formatar_recuperacao_texto(
                     f"{cand_u.tipo_unidade} | {cand_u.fonte}] "
                     f'(score: {cand_u.pontuacao:.4f}) "{txt}"'
                 )
+
+    linhas.append("=" * 80)
+    return "\n".join(linhas)
+
+
+def formatar_alinhamento_texto(
+    aula: Aula,
+    documento: Documento,
+    resultados: list[ResultadoAlinhamentoIntervalo],
+) -> str:
+    """Formata os resultados do alinhamento temporal e hierárquico para exibição no terminal."""
+    estrategia = resultados[0].alinhamento.estrategia if resultados else "desconhecida"
+    origem = resultados[0].alinhamento.origem if resultados else "automatic"
+
+    linhas = [
+        "=" * 80,
+        "AnotaAI — Alinhamento Temporal e Hierárquico",
+        "=" * 80,
+        f"Aula: {aula.id_aula} ({aula.titulo})",
+        f"Documento: {documento.id_documento} ({documento.titulo})",
+        f"Estratégia: {estrategia.upper()} | Origem: {origem}",
+        "=" * 80,
+    ]
+
+    mapa_num_pag = {p.id_pagina: p.numero_pagina for p in documento.paginas}
+
+    for res in resultados:
+        alin = res.alinhamento
+        linhas.append("-" * 80)
+        linhas.append(
+            f"[{res.ordem_intervalo:02d}] {res.intervalo_tempo.formatar()} "
+            f'({alin.origem}) "{res.texto_intervalo}"'
+        )
+
+        if alin.status == StatusAlinhamento.ABSTIDO.value:
+            linhas.append(f"     [ABSTENÇÃO] {alin.justificativa}")
+            continue
+
+        nums_pags = [
+            f"Pág. {mapa_num_pag.get(pid, 0):02d} ({pid})" for pid in alin.ids_paginas
+        ]
+        linhas.append(
+            f"     [ALINHADO] Confiança: {alin.confianca:.4f} | "
+            f"Relação: {alin.tipo_relacao} | Páginas: {', '.join(nums_pags)}"
+        )
+        if alin.ids_unidades:
+            linhas.append(f"     Unidades alinhadas: {', '.join(alin.ids_unidades)}")
+        if alin.justificativa:
+            linhas.append(f"     Evidência: {alin.justificativa}")
+
+        for cp in res.candidatos_pagina[:3]:
+            marcador = "*" if cp.selecionado else " "
+            linhas.append(
+                f"       [{marcador}] Pág. {cp.numero_pagina:02d} "
+                f"(final: {cp.pontuacao_final:.4f} | sim: {cp.pontuacao_similaridade:.4f} | "
+                f"temp: {cp.pontuacao_temporal:.4f} | vis: {cp.pontuacao_visual:.4f})"
+            )
 
     linhas.append("=" * 80)
     return "\n".join(linhas)

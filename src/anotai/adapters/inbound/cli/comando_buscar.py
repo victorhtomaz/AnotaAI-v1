@@ -66,6 +66,143 @@ def configurar_parser_buscar(subparsers: argparse._SubParsersAction) -> None:
     )
 
 
+def resolver_aula_cli(repo_aula: Any, termo_id: str | None) -> Any | None:
+    aulas = repo_aula.listar()
+    if termo_id is None:
+        if len(aulas) == 1:
+            return aulas[0]
+        if not aulas:
+            print(
+                "Nenhuma aula cadastrada no banco. Use 'anotai transcrever <audio>' primeiro.",
+                file=sys.stderr,
+            )
+            return None
+        print("Múltiplas aulas disponíveis no banco. Especifique uma:", file=sys.stderr)
+        for a in aulas:
+            print(f"  - {a.id_aula} (\"{a.titulo}\")", file=sys.stderr)
+        return None
+
+    aula = repo_aula.buscar_por_id(termo_id)
+    if aula is not None:
+        return aula
+
+    # Tenta casamento por nome de arquivo se for caminho
+    nome_arquivo = Path(termo_id).name.lower()
+    matches_arq = [
+        a
+        for a in aulas
+        if Path(a.caminho_arquivo).name.lower() == nome_arquivo
+        or Path(a.uri_origem).name.lower() == nome_arquivo
+    ]
+    if len(matches_arq) == 1:
+        return matches_arq[0]
+
+    if hasattr(repo_aula, "buscar_por_termo"):
+        matches_aula_tuplas = repo_aula.buscar_por_termo(termo_id)
+        if len(matches_aula_tuplas) == 1:
+            return repo_aula.buscar_por_id(matches_aula_tuplas[0][0])
+        if len(matches_aula_tuplas) > 1:
+            print(f"Múltiplas aulas encontradas para '{termo_id}':", file=sys.stderr)
+            for m_id, m_titulo in matches_aula_tuplas:
+                print(f"  - {m_id} (\"{m_titulo}\")", file=sys.stderr)
+            return None
+        print(f"Aula '{termo_id}' não encontrada no banco de dados.", file=sys.stderr)
+        return None
+
+    matches_aula = [
+        a for a in aulas if termo_id in a.id_aula or termo_id.lower() in a.titulo.lower()
+    ]
+    if len(matches_aula) == 1:
+        return matches_aula[0]
+    if len(matches_aula) > 1:
+        print(f"Múltiplas aulas encontradas para '{termo_id}':", file=sys.stderr)
+        for m in matches_aula:
+            print(f"  - {m.id_aula} (\"{m.titulo}\")", file=sys.stderr)
+        return None
+    print(f"Aula '{termo_id}' não encontrada no banco de dados.", file=sys.stderr)
+    return None
+
+
+def resolver_documento_cli(repo_doc: Any, termo_id: str | None) -> Any | None:
+    docs = repo_doc.listar()
+    if termo_id is None:
+        if len(docs) == 1:
+            return docs[0]
+        if not docs:
+            print(
+                "Nenhum documento cadastrado no banco. Use 'anotai pdf <arquivo>' primeiro.",
+                file=sys.stderr,
+            )
+            return None
+        print("Múltiplos documentos disponíveis no banco. Especifique um:", file=sys.stderr)
+        for d in docs:
+            print(f"  - {d.id_documento} (\"{d.titulo}\")", file=sys.stderr)
+        return None
+
+    documento = repo_doc.buscar_por_id(termo_id)
+    if documento is not None:
+        return documento
+
+    # Tenta casamento por nome de arquivo se for caminho
+    nome_arquivo = Path(termo_id).name.lower()
+    matches_arq = [
+        d
+        for d in docs
+        if Path(d.uri_origem).name.lower() == nome_arquivo
+    ]
+    if len(matches_arq) == 1:
+        return matches_arq[0]
+
+    if hasattr(repo_doc, "buscar_por_termo"):
+        matches_doc_tuplas = repo_doc.buscar_por_termo(termo_id)
+        if len(matches_doc_tuplas) == 1:
+            return repo_doc.buscar_por_id(matches_doc_tuplas[0][0])
+        if len(matches_doc_tuplas) > 1:
+            print(f"Múltiplos documentos encontrados para '{termo_id}':", file=sys.stderr)
+            for md_id, md_titulo in matches_doc_tuplas:
+                print(f"  - {md_id} (\"{md_titulo}\")", file=sys.stderr)
+            return None
+        print(f"Documento '{termo_id}' não encontrado no banco de dados.", file=sys.stderr)
+        return None
+
+    termo = termo_id.lower()
+    matches_doc = [
+        d for d in docs if termo_id in d.id_documento or termo in d.titulo.lower()
+    ]
+    if len(matches_doc) == 1:
+        return matches_doc[0]
+    if len(matches_doc) > 1:
+        print(f"Múltiplos documentos encontrados para '{termo_id}':", file=sys.stderr)
+        for md in matches_doc:
+            print(f"  - {md.id_documento} (\"{md.titulo}\")", file=sys.stderr)
+        return None
+    print(f"Documento '{termo_id}' não encontrado no banco de dados.", file=sys.stderr)
+    return None
+
+
+def construir_indices_busca(
+    estrategia_base: str, settings: Settings, modelo_override: str | None = None
+) -> tuple[Any, Any]:
+    if estrategia_base == "bm25":
+        return IndiceBM25(), IndiceBM25()
+
+    if estrategia_base in ("embedding", "hybrid"):
+        modelo_emb = modelo_override or settings.embedding_model
+        provedor = ProvedorEmbeddingOllama(
+            cliente=Client(host=settings.ollama_url),
+            modelo=modelo_emb,
+            manter_vivo=settings.ollama_keep_alive,
+        )
+        if estrategia_base == "embedding":
+            return IndiceEmbeddings(provedor), IndiceEmbeddings(provedor)
+        return (
+            IndiceHibrido(IndiceBM25(), IndiceEmbeddings(provedor)),
+            IndiceHibrido(IndiceBM25(), IndiceEmbeddings(provedor)),
+        )
+
+    raise ValueError(f"Estratégia base de busca não suportada: '{estrategia_base}'")
+
+
 def executar_comando_buscar(
     args: argparse.Namespace,
     settings: Settings,
@@ -77,102 +214,17 @@ def executar_comando_buscar(
     repo_aula = repo_aula_cls(banco_path)
     repo_doc = repo_doc_cls(banco_path)
 
-    # 1. Resolução da aula
-    aula = repo_aula.buscar_por_id(args.id_aula)
+    aula = resolver_aula_cli(repo_aula, args.id_aula)
     if aula is None:
-        if hasattr(repo_aula, "buscar_por_termo"):
-            matches_aula_tuplas = repo_aula.buscar_por_termo(args.id_aula)
-            if len(matches_aula_tuplas) == 1:
-                aula = repo_aula.buscar_por_id(matches_aula_tuplas[0][0])
-            elif len(matches_aula_tuplas) > 1:
-                print(f"Múltiplas aulas encontradas para '{args.id_aula}':", file=sys.stderr)
-                for m_id, m_titulo in matches_aula_tuplas:
-                    print(f"  - {m_id} ({m_titulo})", file=sys.stderr)
-                return 1
-            else:
-                print(f"Aula '{args.id_aula}' não encontrada no banco de dados.", file=sys.stderr)
-                return 1
-        else:
-            aulas = repo_aula.listar()
-            matches_aula = [
-                a
-                for a in aulas
-                if args.id_aula in a.id_aula or args.id_aula.lower() in a.titulo.lower()
-            ]
-            if len(matches_aula) == 1:
-                aula = matches_aula[0]
-            elif len(matches_aula) > 1:
-                print(f"Múltiplas aulas encontradas para '{args.id_aula}':", file=sys.stderr)
-                for m in matches_aula:
-                    print(f"  - {m.id_aula} ({m.titulo})", file=sys.stderr)
-                return 1
-            else:
-                print(f"Aula '{args.id_aula}' não encontrada no banco de dados.", file=sys.stderr)
-                return 1
+        return 1
 
-    # 2. Resolução do documento
-    documento = repo_doc.buscar_por_id(args.id_documento)
+    documento = resolver_documento_cli(repo_doc, args.id_documento)
     if documento is None:
-        if hasattr(repo_doc, "buscar_por_termo"):
-            matches_doc_tuplas = repo_doc.buscar_por_termo(args.id_documento)
-            if len(matches_doc_tuplas) == 1:
-                documento = repo_doc.buscar_por_id(matches_doc_tuplas[0][0])
-            elif len(matches_doc_tuplas) > 1:
-                print(
-                    f"Múltiplos documentos encontrados para '{args.id_documento}':",
-                    file=sys.stderr,
-                )
-                for md_id, md_titulo in matches_doc_tuplas:
-                    print(f"  - {md_id} ({md_titulo})", file=sys.stderr)
-                return 1
-            else:
-                print(
-                    f"Documento '{args.id_documento}' não encontrado no banco de dados.",
-                    file=sys.stderr,
-                )
-                return 1
-        else:
-            docs = repo_doc.listar()
-            termo = args.id_documento.lower()
-            matches_doc = [
-                d
-                for d in docs
-                if args.id_documento in d.id_documento or termo in d.titulo.lower()
-            ]
-            if len(matches_doc) == 1:
-                documento = matches_doc[0]
-            elif len(matches_doc) > 1:
-                print(
-                    f"Múltiplos documentos encontrados para '{args.id_documento}':",
-                    file=sys.stderr,
-                )
-                for md in matches_doc:
-                    print(f"  - {md.id_documento} ({md.titulo})", file=sys.stderr)
-                return 1
-            else:
-                print(
-                    f"Documento '{args.id_documento}' não encontrado no banco de dados.",
-                    file=sys.stderr,
-                )
-                return 1
+        return 1
 
-    # 3. Construção dos índices de busca conforme estratégia
-    if args.strategy == "bm25":
-        idx_paginas = IndiceBM25()
-        idx_unidades = IndiceBM25()
-    elif args.strategy in ("embedding", "hybrid"):
-        modelo_emb = args.model or settings.embedding_model
-        provedor = ProvedorEmbeddingOllama(
-            cliente=Client(host=settings.ollama_url),
-            modelo=modelo_emb,
-            manter_vivo=settings.ollama_keep_alive,
-        )
-        if args.strategy == "embedding":
-            idx_paginas = IndiceEmbeddings(provedor)
-            idx_unidades = IndiceEmbeddings(provedor)
-        else:
-            idx_paginas = IndiceHibrido(IndiceBM25(), IndiceEmbeddings(provedor))
-            idx_unidades = IndiceHibrido(IndiceBM25(), IndiceEmbeddings(provedor))
+    idx_paginas, idx_unidades = construir_indices_busca(
+        args.strategy, settings, modelo_override=args.model
+    )
 
     limiar = args.threshold if args.threshold is not None else settings.abstention_threshold
 
