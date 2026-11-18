@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AnotaAI — Alinhamento Temporal e Documental</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script defer src="/static/js/pdf-viewer.js"></script>
+    <script defer src="/static/js/app.js"></script>
+    <script defer src="/static/vendor/alpine.min.js"></script>
+</head>
+<body x-data x-init="$store.anotai.conectarElementos($refs.playerAudio, $refs.pdfContainer)">
+    <header class="cabecalho-principal">
+        <div class="container cabecalho-conteudo">
+            <div class="marca-grupo">
+                <a href="/" class="marca-link">
+                    <span class="marca-selo" aria-hidden="true">A</span>
+                    <span class="marca-nome">AnotaAI</span>
+                </a>
+            </div>
+            <nav class="navegacao-topo" aria-label="Modos da interface">
+                <button
+                    type="button"
+                    class="nav-atalho"
+                    :class="{ 'ativo': $store.anotai.abaAtiva === 'importacao' }"
+                    @click="$store.anotai.abaAtiva = 'importacao'"
+                >
+                    Importação e processamento
+                </button>
+                <button
+                    type="button"
+                    class="nav-atalho"
+                    :class="{ 'ativo': $store.anotai.abaAtiva === 'explorador' }"
+                    @click="$store.anotai.abaAtiva = 'explorador'"
+                >
+                    Explorador de Aulas
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container conteudo-principal">
+        <div
+            class="alerta alerta-erro"
+            role="alert"
+            x-cloak
+            x-show="$store.anotai.erroGeral"
+        >
+            <strong>Aviso:</strong>
+            <span x-text="$store.anotai.erroGeral"></span>
+        </div>
+
+        <!-- Visão 1: Importação e Processamento -->
+        <section x-show="$store.anotai.abaAtiva === 'importacao'" x-cloak>
+            <div class="pagina-grade">
+                <section class="painel painel-formulario">
+                    <div class="painel-cabecalho">
+                        <div>
+                            <h1>Importação e processamento</h1>
+                            <p class="subtexto">
+                                Envie os arquivos da aula e configure extração de PDF, OCR via Ollama, transcrição WhisperX e alinhamento.
+                            </p>
+                        </div>
+                    </div>
+
+                    <form
+                        x-ref="formProcessamento"
+                        @submit.prevent="$store.anotai.enviarProcessamento($refs.formProcessamento)"
+                    >
+                        <fieldset class="bloco-etapas">
+                            <legend class="bloco-titulo">Etapas ativas nesta execução</legend>
+                            <div class="etapas-seletor">
+                                <label class="opcao-check-bloco">
+                                    <input
+                                        type="checkbox"
+                                        name="executar_pdf"
+                                        x-model="$store.anotai.opcoes.executar_pdf"
+                                    >
+                                    <span>Processar PDF e OCR</span>
+                                </label>
+                                <label class="opcao-check-bloco">
+                                    <input
+                                        type="checkbox"
+                                        name="executar_transcricao"
+                                        x-model="$store.anotai.opcoes.executar_transcricao"
+                                    >
+                                    <span>Transcrever áudio</span>
+                                </label>
+                                <label class="opcao-check-bloco">
+                                    <input
+                                        type="checkbox"
+                                        name="executar_alinhamento"
+                                        x-model="$store.anotai.opcoes.executar_alinhamento"
+                                    >
+                                    <span>Alinhar aula e documento</span>
+                                </label>
+                            </div>
+                        </fieldset>
+
+                        <div
+                            class="estado-etapas-vazio"
+                            x-show="!$store.anotai.opcoes.executar_pdf && !$store.anotai.opcoes.executar_transcricao && !$store.anotai.opcoes.executar_alinhamento"
+                        >
+                            Selecione acima ao menos uma etapa (PDF e OCR, Transcrição ou Alinhamento) para exibir sua área de configuração.
+                        </div>
+
+                        <section
+                            class="secao-formulario"
+                            x-show="$store.anotai.opcoes.executar_pdf"
+                        >
+                            <div class="secao-cabecalho">
+                                <h2>Material didático (PDF e OCR)</h2>
+                                <span class="secao-nota">Extração de texto nativo, layout e análise visual</span>
+                            </div>
+
+                            <div class="grade-campos grade-2">
+                                <div class="campo-grupo">
+                                    <label for="arquivo_pdf" class="campo-rotulo">Enviar novo arquivo PDF</label>
+                                    <label class="zona-upload" for="arquivo_pdf">
+                                        <input
+                                            type="file"
+                                            id="arquivo_pdf"
+                                            name="arquivo_pdf"
+                                            accept=".pdf,application/pdf"
+                                            @change="$store.anotai.atualizarResumoArquivo($event, 'pdf')"
+                                        >
+                                        <span class="upload-acao">Selecionar arquivo PDF</span>
+                                        <span
+                                            class="upload-arquivo"
+                                            x-text="$store.anotai.nomeArquivoPdf || 'Nenhum arquivo escolhido'"
+                                        ></span>
+                                    </label>
+                                </div>
+
+                                <div class="campo-grupo">
+                                    <label for="id_documento_existente" class="campo-rotulo">
+                                        Ou reutilizar documento do acervo
+                                    </label>
+                                    <select
+                                        id="id_documento_existente"
+                                        name="id_documento_existente"
+                                        x-model="$store.anotai.idDocumentoExistente"
+                                    >
+                                        <option value="">Selecionar apenas se não enviar novo PDF</option>
+                                        <template x-for="doc in $store.anotai.documentos" :key="doc.id_documento">
+                                            <option
+                                                :value="doc.id_documento"
+                                                x-text="`${doc.titulo_documento} (${doc.paginas} págs.)`"
+                                            ></option>
+                                        </template>
+                                    </select>
+                                    <span class="campo-ajuda">Permite alinhar um PDF já importado sem reprocessar OCR.</span>
+                                </div>
+                            </div>
+
+                            <div class="campo-grupo">
+                                <span class="campo-rotulo">Método de extração textual</span>
+                                <div class="radio-grupo">
+                                    <label class="opcao-radio">
+                                        <input
+                                            type="radio"
+                                            name="metodo_pdf"
+                                            value="native_then_ocr"
+                                            x-model="$store.anotai.opcoes.metodo_pdf"
+                                        >
+                                        <span>
+                                            <strong>Extração nativa + OCR visual (Ollama)</strong>
+                                            <small>Usa texto nativo quando disponível e aciona modelo visual apenas em páginas digitalizadas ou gráficas.</small>
+                                        </span>
+                                    </label>
+                                    <label class="opcao-radio">
+                                        <input
+                                            type="radio"
+                                            name="metodo_pdf"
+                                            value="native"
+                                            x-model="$store.anotai.opcoes.metodo_pdf"
+                                        >
+                                        <span>
+                                            <strong>Somente extração nativa</strong>
+                                            <small>Mais rápido; ignora o analisador visual do Ollama.</small>
+                                        </span>
+                                    </label>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section
+                            class="secao-formulario"
+                            x-show="$store.anotai.opcoes.executar_transcricao"
+                        >
+                            <div class="secao-cabecalho">
+                                <h2>Gravação da aula (Áudio e ASR)</h2>
+                                <span class="secao-nota">Transcrição WhisperX e agrupamento em intervalos explicativos</span>
+                            </div>
+
+                            <div class="grade-campos grade-2">
+                                <div class="campo-grupo">
+                                    <label for="arquivo_audio" class="campo-rotulo">Enviar arquivo de áudio ou vídeo</label>
+                                    <label class="zona-upload" for="arquivo_audio">
+                                        <input
+                                            type="file"
+                                            id="arquivo_audio"
+                                            name="arquivo_audio"
+                                            accept=".wav,.mp3,.m4a,.mp4,.mkv,.webm,.ogg,.flac,audio/*,video/*"
+                                            @change="$store.anotai.atualizarResumoArquivo($event, 'audio')"
+                                        >
+                                        <span class="upload-acao">Selecionar áudio ou vídeo</span>
+                                        <span
+                                            class="upload-arquivo"
+                                            x-text="$store.anotai.nomeArquivoAudio || 'Nenhum arquivo escolhido'"
+                                        ></span>
+                                    </label>
+                                </div>
+
+                                <div class="campo-grupo">
+                                    <label for="id_aula_existente" class="campo-rotulo">
+                                        Ou reutilizar aula do acervo
+                                    </label>
+                                    <select
+                                        id="id_aula_existente"
+                                        name="id_aula_existente"
+                                        x-model="$store.anotai.idAulaExistente"
+                                    >
+                                        <option value="">Selecionar apenas se não enviar novo áudio</option>
+                                        <template x-for="aula in $store.anotai.aulas" :key="aula.id_aula">
+                                            <option
+                                                :value="aula.id_aula"
+                                                x-text="`${aula.titulo} (${aula.duracao.toFixed(1)}s)`"
+                                            ></option>
+                                        </template>
+                                    </select>
+                                    <span class="campo-ajuda">Permite realinhar uma aula já transcrita com novas configurações.</span>
+                                </div>
+                            </div>
+
+                            <div class="grade-campos grade-2">
+                                <div class="campo-grupo">
+                                    <label for="titulo_aula" class="campo-rotulo">Título identificador da aula</label>
+                                    <input
+                                        type="text"
+                                        id="titulo_aula"
+                                        name="titulo_aula"
+                                        x-model="$store.anotai.opcoes.titulo_aula"
+                                        placeholder="Opcional — usa o nome do arquivo se vazio"
+                                    >
+                                </div>
+                                <div class="campo-grupo">
+                                    <label for="dispositivo_whisperx" class="campo-rotulo">Dispositivo</label>
+                                    <select
+                                        id="dispositivo_whisperx"
+                                        name="dispositivo_whisperx"
+                                        x-model="$store.anotai.opcoes.dispositivo_whisperx"
+                                    >
+                                        <option value="cuda">CUDA (GPU)</option>
+                                        <option value="cpu">CPU</option>
+                                        <option value="auto">Automático</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <details class="gaveta-avancada" open>
+                                <summary>Parâmetros de segmentação em intervalos explicativos</summary>
+                                <div class="grade-campos grade-3 gaveta-conteudo">
+                                    <div class="campo-grupo">
+                                        <label for="limiar_silencio" class="campo-rotulo">Limiar de silêncio (s)</label>
+                                        <input
+                                            type="number"
+                                            id="limiar_silencio"
+                                            name="limiar_silencio"
+                                            x-model.number="$store.anotai.opcoes.limiar_silencio"
+                                            step="0.1"
+                                            min="0.1"
+                                        >
+                                    </div>
+                                    <div class="campo-grupo">
+                                        <label for="duracao_minima_intervalo" class="campo-rotulo">Duração mínima (s)</label>
+                                        <input
+                                            type="number"
+                                            id="duracao_minima_intervalo"
+                                            name="duracao_minima_intervalo"
+                                            x-model.number="$store.anotai.opcoes.duracao_minima_intervalo"
+                                            step="1"
+                                            min="1"
+                                        >
+                                    </div>
+                                    <div class="campo-grupo">
+                                        <label for="duracao_maxima_intervalo" class="campo-rotulo">Duração máxima (s)</label>
+                                        <input
+                                            type="number"
+                                            id="duracao_maxima_intervalo"
+                                            name="duracao_maxima_intervalo"
+                                            x-model.number="$store.anotai.opcoes.duracao_maxima_intervalo"
+                                            step="1"
+                                            min="1"
+                                        >
+                                    </div>
+                                </div>
+                            </details>
+                        </section>
+
+                        <section
+                            class="secao-formulario"
+                            x-show="$store.anotai.opcoes.executar_alinhamento"
+                        >
+                            <div class="secao-cabecalho">
+                                <h2>Alinhamento temporal e hierárquico</h2>
+                                <span class="secao-nota">Correspondência multi-rótulo entre intervalos de fala e páginas/unidades</span>
+                            </div>
+
+                            <div
+                                class="grade-campos grade-2"
+                                x-show="!$store.anotai.opcoes.executar_pdf || !$store.anotai.opcoes.executar_transcricao"
+                            >
+                                <div
+                                    class="campo-grupo"
+                                    x-show="!$store.anotai.opcoes.executar_pdf"
+                                >
+                                    <label for="id_documento_alinhamento" class="campo-rotulo">
+                                        Documento do acervo para alinhar
+                                    </label>
+                                    <select
+                                        id="id_documento_alinhamento"
+                                        x-model="$store.anotai.idDocumentoExistente"
+                                    >
+                                        <option value="">Selecione um documento já processado</option>
+                                        <template x-for="doc in $store.anotai.documentos" :key="doc.id_documento">
+                                            <option
+                                                :value="doc.id_documento"
+                                                x-text="`${doc.titulo_documento} (${doc.paginas} págs.)`"
+                                            ></option>
+                                        </template>
+                                    </select>
+                                </div>
+
+                                <div
+                                    class="campo-grupo"
+                                    x-show="!$store.anotai.opcoes.executar_transcricao"
+                                >
+                                    <label for="id_aula_alinhamento" class="campo-rotulo">
+                                        Aula do acervo para alinhar
+                                    </label>
+                                    <select
+                                        id="id_aula_alinhamento"
+                                        x-model="$store.anotai.idAulaExistente"
+                                    >
+                                        <option value="">Selecione uma aula já transcrita</option>
+                                        <template x-for="aula in $store.anotai.aulas" :key="aula.id_aula">
+                                            <option
+                                                :value="aula.id_aula"
+                                                x-text="`${aula.titulo} (${aula.duracao.toFixed(1)}s)`"
+                                            ></option>
+                                        </template>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="grade-campos">
+                                <div class="campo-grupo">
+                                    <label for="modo_alinhamento" class="campo-rotulo">Perfil de alinhamento</label>
+                                    <select
+                                        id="modo_alinhamento"
+                                        name="modo_alinhamento"
+                                        x-model="$store.anotai.opcoes.modo_alinhamento"
+                                        @change="$store.anotai.aplicarPresetAlinhamento()"
+                                    >
+                                        <option value="padrao">Padrão — Hierárquico HMM + Híbrido (BM25 + Embeddings)</option>
+                                        <option value="rapido">Rápido — Hierárquico Kernel + BM25</option>
+                                        <option value="semantico">Semântico — Embeddings Ollama</option>
+                                        <option value="lexical">Lexical — BM25 independente</option>
+                                        <option value="personalizado">Personalizado (combinar parâmetros abaixo)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div
+                                class="grade-campos grade-3"
+                                x-show="$store.anotai.opcoes.modo_alinhamento === 'personalizado'"
+                            >
+                                <div class="campo-grupo">
+                                    <label for="estrategia_alinhamento" class="campo-rotulo">Estratégia estrutural</label>
+                                    <select
+                                        id="estrategia_alinhamento"
+                                        name="estrategia_alinhamento"
+                                        x-model="$store.anotai.opcoes.estrategia_alinhamento"
+                                        @change="$store.anotai.marcarPerfilPersonalizado()"
+                                    >
+                                        <option value="hierarchical">Hierárquica (página e unidade)</option>
+                                        <option value="temporal">Por página (sem refinamento em unidade)</option>
+                                    </select>
+                                </div>
+                                <div class="campo-grupo">
+                                    <label for="estrategia_base" class="campo-rotulo">Recuperação base</label>
+                                    <select
+                                        id="estrategia_base"
+                                        name="estrategia_base"
+                                        x-model="$store.anotai.opcoes.estrategia_base"
+                                        @change="$store.anotai.marcarPerfilPersonalizado()"
+                                    >
+                                        <option value="hybrid">Híbrido (BM25 + Embeddings)</option>
+                                        <option value="bm25">BM25 (lexical)</option>
+                                        <option value="embedding">Embeddings (semântico)</option>
+                                    </select>
+                                </div>
+                                <div class="campo-grupo">
+                                    <label for="modelo_temporal" class="campo-rotulo">Modelo temporal</label>
+                                    <select
+                                        id="modelo_temporal"
+                                        name="modelo_temporal"
+                                        x-model="$store.anotai.opcoes.modelo_temporal"
+                                        @change="$store.anotai.marcarPerfilPersonalizado()"
+                                    >
+                                        <option value="hmm">HMM (forward-backward)</option>
+                                        <option value="kernel">Kernel de vizinhança</option>
+                                        <option value="none">Sem contexto temporal (independente)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </section>
+
+                        <div class="barra-acoes">
+                            <button
+                                type="submit"
+                                class="botao-primario"
+                                :disabled="$store.anotai.submetendoProcessamento"
+                                x-text="$store.anotai.submetendoProcessamento ? 'Enviando arquivos...' : 'Iniciar processamento'"
+                            >
+                                Iniciar processamento
+                            </button>
+                            <button
+                                type="button"
+                                class="botao-secundario"
+                                @click="$store.anotai.restaurarOpcoesPadrao($refs.formProcessamento)"
+                            >
+                                Restaurar padrões
+                            </button>
+                        </div>
+                    </form>
+                </section>
+
+                <aside class="coluna-lateral">
+                    <section class="painel painel-status" aria-live="polite">
+                        <div class="painel-cabecalho">
+                            <div>
+                                <h2>Status do processamento</h2>
+                                <p class="subtexto">
+                                    Acompanhamento de PDF, OCR, transcrição e alinhamento.
+                                </p>
+                            </div>
+                            <span
+                                class="badge-estado"
+                                :class="`estado-${$store.anotai.jobAtual ? $store.anotai.jobAtual.status_geral : 'aguardando'}`"
+                                x-text="$store.anotai.jobAtual ? $store.anotai.jobAtual.rotulo_geral : 'Pronto'"
+                            ></span>
+                        </div>
+
+                        <div
+                            class="alerta alerta-erro"
+                            role="alert"
+                            x-show="$store.anotai.erroImportacao"
+                        >
+                            <strong>Não foi possível iniciar o processamento:</strong>
+                            <span x-text="$store.anotai.erroImportacao"></span>
+                        </div>
+
+                        <template x-if="$store.anotai.jobAtual">
+                            <div>
+                                <div class="tarefa-metadados">
+                                    <div class="meta-item">
+                                        <span class="meta-rotulo">Execução</span>
+                                        <span class="meta-valor tabular" x-text="$store.anotai.jobAtual.job_id"></span>
+                                    </div>
+                                    <div class="meta-item">
+                                        <span class="meta-rotulo">Iniciada às</span>
+                                        <span class="meta-valor tabular" x-text="$store.anotai.jobAtual.criado_em"></span>
+                                    </div>
+                                    <div class="meta-item" x-show="$store.anotai.jobAtual.nome_arquivo_pdf">
+                                        <span class="meta-rotulo">PDF</span>
+                                        <span class="meta-valor" x-text="$store.anotai.jobAtual.nome_arquivo_pdf"></span>
+                                    </div>
+                                    <div class="meta-item" x-show="$store.anotai.jobAtual.nome_arquivo_audio">
+                                        <span class="meta-rotulo">Áudio</span>
+                                        <span class="meta-valor" x-text="$store.anotai.jobAtual.nome_arquivo_audio"></span>
+                                    </div>
+                                </div>
+
+                                <div
+                                    class="alerta"
+                                    :class="$store.anotai.jobAtual.status_geral === 'cancelado' ? 'alerta-aviso' : 'alerta-erro'"
+                                    role="alert"
+                                    x-show="$store.anotai.jobAtual.mensagem_erro"
+                                >
+                                    <strong x-text="$store.anotai.jobAtual.status_geral === 'cancelado' ? 'Execução interrompida:' : 'Falha na execução:'"></strong>
+                                    <span x-text="$store.anotai.jobAtual.mensagem_erro"></span>
+                                </div>
+
+                                <div
+                                    class="barra-cancelar"
+                                    x-show="$store.anotai.jobAtual.em_andamento"
+                                >
+                                    <button
+                                        type="button"
+                                        class="botao-perigo botao-compacto"
+                                        :disabled="$store.anotai.cancelandoJob"
+                                        @click="$store.anotai.cancelarProcessamento()"
+                                        x-text="$store.anotai.cancelandoJob ? 'Interrompendo...' : 'Interromper processamento'"
+                                    >
+                                        Interromper processamento
+                                    </button>
+                                </div>
+
+                                <ol class="linha-etapas">
+                                    <template
+                                        x-for="etapa in Object.values($store.anotai.jobAtual.etapas)"
+                                        :key="etapa.chave"
+                                    >
+                                        <li class="etapa-item" :class="`etapa-${etapa.estado}`">
+                                            <div class="etapa-marcador" aria-hidden="true"></div>
+                                            <div class="etapa-corpo">
+                                                <div class="etapa-topo">
+                                                    <h3 class="etapa-titulo" x-text="etapa.titulo"></h3>
+                                                    <span
+                                                        class="badge-estado"
+                                                        :class="`estado-${etapa.estado}`"
+                                                        x-text="etapa.rotulo_estado"
+                                                    ></span>
+                                                </div>
+                                                <p class="etapa-resumo" x-text="etapa.resumo"></p>
+                                                <p
+                                                    class="etapa-erro"
+                                                    x-show="etapa.mensagem_erro"
+                                                    x-text="etapa.mensagem_erro"
+                                                ></p>
+                                                <dl
+                                                    class="etapa-metricas"
+                                                    x-show="Object.keys(etapa.metricas || {}).length > 0"
+                                                >
+                                                    <template
+                                                        x-for="[rotulo, valor] in Object.entries(etapa.metricas || {})"
+                                                        :key="rotulo"
+                                                    >
+                                                        <div class="metrica-par">
+                                                            <dt x-text="rotulo"></dt>
+                                                            <dd class="tabular" x-text="valor"></dd>
+                                                        </div>
+                                                    </template>
+                                                </dl>
+                                            </div>
+                                        </li>
+                                    </template>
+                                </ol>
+
+                                <div
+                                    class="barra-abrir-explorador"
+                                    x-show="!$store.anotai.jobAtual.em_andamento && $store.anotai.jobAtual.id_documento"
+                                >
+                                    <button
+                                        type="button"
+                                        class="botao-primario"
+                                        @click="$store.anotai.abrirDocumento($store.anotai.jobAtual.id_documento, $store.anotai.jobAtual.id_aula)"
+                                    >
+                                        Abrir no explorador bidirecional
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+
+                        <template x-if="!$store.anotai.jobAtual">
+                            <ol class="linha-etapas">
+                                <li class="etapa-item etapa-aguardando">
+                                    <div class="etapa-marcador" aria-hidden="true"></div>
+                                    <div class="etapa-corpo">
+                                        <div class="etapa-topo">
+                                            <h3 class="etapa-titulo">1. Extração de PDF</h3>
+                                            <span class="badge-estado estado-aguardando">Aguardando</span>
+                                        </div>
+                                        <p class="etapa-resumo">Leitura de texto nativo, páginas e unidades documentais.</p>
+                                    </div>
+                                </li>
+                                <li class="etapa-item etapa-aguardando">
+                                    <div class="etapa-marcador" aria-hidden="true"></div>
+                                    <div class="etapa-corpo">
+                                        <div class="etapa-topo">
+                                            <h3 class="etapa-titulo">2. OCR visual (Ollama)</h3>
+                                            <span class="badge-estado estado-aguardando">Aguardando</span>
+                                        </div>
+                                        <p class="etapa-resumo">Reconhecimento de páginas digitalizadas ou visuais.</p>
+                                    </div>
+                                </li>
+                                <li class="etapa-item etapa-aguardando">
+                                    <div class="etapa-marcador" aria-hidden="true"></div>
+                                    <div class="etapa-corpo">
+                                        <div class="etapa-topo">
+                                            <h3 class="etapa-titulo">3. Transcrição (WhisperX)</h3>
+                                            <span class="badge-estado estado-aguardando">Aguardando</span>
+                                        </div>
+                                        <p class="etapa-resumo">Geração de segmentos temporais e intervalos explicativos.</p>
+                                    </div>
+                                </li>
+                                <li class="etapa-item etapa-aguardando">
+                                    <div class="etapa-marcador" aria-hidden="true"></div>
+                                    <div class="etapa-corpo">
+                                        <div class="etapa-topo">
+                                            <h3 class="etapa-titulo">4. Alinhamento temporal</h3>
+                                            <span class="badge-estado estado-aguardando">Aguardando</span>
+                                        </div>
+                                        <p class="etapa-resumo">Vinculação página/unidade com contexto temporal e abstenção.</p>
+                                    </div>
+                                </li>
+                            </ol>
+                        </template>
+                    </section>
+
+                    <section class="painel painel-acervo">
+                        <div class="painel-cabecalho">
+                            <div>
+                                <h2>Acervo salvo no banco</h2>
+                                <p class="subtexto">
+                                    Selecione um documento vinculado a uma aula para explorar áudio, transcrição, páginas e unidades.
+                                </p>
+                            </div>
+                            <div class="acervo-totais tabular">
+                                <span x-text="`${$store.anotai.documentosVinculados.length} PDFs`"></span>
+                                <span x-text="`${$store.anotai.aulas.length} aulas`"></span>
+                            </div>
+                        </div>
+
+                        <p
+                            class="subtexto"
+                            x-show="$store.anotai.documentosVinculados.length === 0"
+                        >
+                            Ainda não há documentos vinculados a uma aula no banco SQLite.
+                        </p>
+
+                        <ul class="acervo-lista" x-show="$store.anotai.documentosVinculados.length > 0">
+                            <template x-for="doc in $store.anotai.documentosVinculados" :key="doc.id_documento">
+                                <li class="acervo-item">
+                                    <div class="acervo-item-titulo">
+                                        <strong x-text="doc.titulo_documento"></strong>
+                                        <code class="codigo-id" x-text="doc.id_documento"></code>
+                                    </div>
+                                    <div class="acervo-item-detalhes tabular">
+                                        <span x-text="`${doc.paginas} págs.`"></span>
+                                        <span x-text="`${doc.unidades} unidades`"></span>
+                                        <span x-text="`${doc.paginas_ocr} OCR`"></span>
+                                        <span x-text="`${doc.alinhamentos} alinhamentos`"></span>
+                                    </div>
+                                    <div class="acervo-item-rodape">
+                                        <span
+                                            class="subtexto"
+                                            x-text="`Aula: ${doc.titulo_aula || doc.id_aula}`"
+                                        ></span>
+                                        <button
+                                            type="button"
+                                            class="botao-secundario botao-compacto"
+                                            @click="$store.anotai.abrirDocumento(doc.id_documento, doc.id_aula)"
+                                        >
+                                            Explorar
+                                        </button>
+                                    </div>
+                                </li>
+                            </template>
+                        </ul>
+                    </section>
+                </aside>
+            </div>
+        </section>
+
+        <!-- Visão 2: Explorador Bidirecional e Revisão Manual -->
+        <section x-show="$store.anotai.abaAtiva === 'explorador'" x-cloak>
+            <section class="painel barra-explorador">
+                <div class="explorador-topo">
+                    <div class="campo-grupo">
+                        <label for="seletor-doc-explorador" class="campo-rotulo">Documento em análise</label>
+                        <select
+                            id="seletor-doc-explorador"
+                            @change="$store.anotai.abrirDocumento($event.target.value, null, false)"
+                            :value="$store.anotai.documentoAtivo ? $store.anotai.documentoAtivo.id_documento : ''"
+                        >
+                            <option value="">Selecione um documento do acervo</option>
+                            <template x-for="doc in $store.anotai.documentos" :key="doc.id_documento">
+                                <option
+                                    :value="doc.id_documento"
+                                    x-text="doc.titulo_aula ? `${doc.titulo_documento} — ${doc.titulo_aula}` : doc.titulo_documento"
+                                ></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <div class="campo-grupo player-grupo">
+                        <span class="campo-rotulo">
+                            Reprodução da aula
+                            <span
+                                class="subtexto"
+                                x-show="$store.anotai.documentoAtivo?.titulo_aula"
+                                x-text="`(${$store.anotai.documentoAtivo?.titulo_aula || ''})`"
+                            ></span>
+                        </span>
+                        <div class="player-controle-linha">
+                            <audio
+                                x-ref="playerAudio"
+                                class="player-audio"
+                                controls
+                                controlsList="noplaybackrate"
+                                preload="metadata"
+                                :src="$store.anotai.documentoAtivo?.url_audio || ''"
+                                @loadedmetadata="$store.anotai.aplicarVelocidadeAudio()"
+                                @timeupdate="$store.anotai.aoAtualizarTempoAudio()"
+                            ></audio>
+                            <select
+                                id="velocidade-audio"
+                                class="seletor-velocidade-audio"
+                                aria-label="Velocidade de reprodução"
+                                x-model.number="$store.anotai.velocidadeAudio"
+                                @change="$store.anotai.aplicarVelocidadeAudio()"
+                            >
+                                <option value="0.75">0.75x</option>
+                                <option value="1">1x</option>
+                                <option value="1.25">1.25x</option>
+                                <option value="1.5">1.5x</option>
+                                <option value="1.75">1.75x</option>
+                                <option value="2">2x</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="explorador-filtros">
+                    <div class="campo-grupo campo-busca">
+                        <label for="busca-texto" class="campo-rotulo">Buscar na transcrição, páginas e unidades</label>
+                        <input
+                            type="search"
+                            id="busca-texto"
+                            x-model="$store.anotai.termoBusca"
+                            placeholder="Filtrar termos da fala ou conteúdo textual das unidades..."
+                        >
+                    </div>
+
+                    <div class="campo-grupo">
+                        <label for="filtro-origem" class="campo-rotulo">Origem e status do vínculo</label>
+                        <select id="filtro-origem" x-model="$store.anotai.filtroOrigem">
+                            <option value="todos">Todos os intervalos</option>
+                            <option value="automatic">Alinhamento automático</option>
+                            <option value="manual">Revisão manual</option>
+                            <option value="abstained">Sem vínculo (abstenção ∅)</option>
+                        </select>
+                    </div>
+
+                    <div
+                        class="campo-grupo"
+                        x-show="$store.anotai.opcoesAlinhamentoDisponiveis.length > 1"
+                    >
+                        <label for="seletor-alinhamento-explorador" class="campo-rotulo">
+                            Alinhamento em exibição
+                        </label>
+                        <select
+                            id="seletor-alinhamento-explorador"
+                            :value="$store.anotai.estrategiaAlinhamentoAtiva"
+                            @change="$store.anotai.selecionarEstrategiaAlinhamento($event.target.value)"
+                        >
+                            <template
+                                x-for="opc in $store.anotai.opcoesAlinhamentoDisponiveis"
+                                :key="opc.valor"
+                            >
+                                <option :value="opc.valor" x-text="opc.rotulo"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <div class="filtros-acoes">
+                        <label class="opcao-check-simples">
+                            <input type="checkbox" x-model="$store.anotai.sincronizarAudioPdf">
+                            <span>Sincronizar áudio e PDF</span>
+                        </label>
+                        <button
+                            type="button"
+                            class="botao-secundario botao-compacto"
+                            x-show="$store.anotai.termoBusca || $store.anotai.filtroOrigem !== 'todos' || $store.anotai.paginaFiltroId || $store.anotai.unidadeSelecionadaId"
+                            @click="$store.anotai.limparFiltros()"
+                        >
+                            Limpar filtros
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <div
+                class="painel estado-explorador-vazio"
+                x-show="!$store.anotai.documentoAtivo"
+            >
+                <p>
+                    Nenhum documento selecionado. Escolha um item acima ou importe um novo material na aba
+                    <strong>Importação e processamento</strong>.
+                </p>
+            </div>
+
+            <div class="grade-explorador" x-show="$store.anotai.documentoAtivo">
+                <!-- Painel Esquerdo: Transcrição Temporal e Revisão Manual -->
+                <section class="painel painel-transcricao">
+                    <div class="painel-cabecalho">
+                        <div>
+                            <h2>Transcrição temporal</h2>
+                            <p class="subtexto tabular">
+                                <span x-text="`${$store.anotai.intervalosFiltrados.length} intervalos exibidos`"></span>
+                                <span
+                                    x-show="$store.anotai.paginaFiltroId"
+                                    x-text="` · filtrado pela página ${$store.anotai.numeroPaginaPorId($store.anotai.paginaFiltroId)}`"
+                                ></span>
+                            </p>
+                        </div>
+                    </div>
+
+                    <p
+                        class="subtexto"
+                        x-show="$store.anotai.documentoAtivo && $store.anotai.documentoAtivo.intervalos.length === 0"
+                    >
+                        Este documento ainda não possui aula transcrita associada.
+                    </p>
+
+                    <ol class="lista-intervalos">
+                        <template
+                            x-for="inter in $store.anotai.intervalosFiltrados"
+                            :key="inter.id_intervalo"
+                        >
+                            <li
+                                class="intervalo-card"
+                                :data-intervalo-id="inter.id_intervalo"
+                                :class="{
+                                    'is-ativo': $store.anotai.intervaloAtivoId === inter.id_intervalo,
+                                    'is-abstido': !inter.vinculo || inter.vinculo.abstido,
+                                    'is-manual': inter.vinculo && inter.vinculo.manual && !inter.vinculo.abstido
+                                }"
+                            >
+                                <div class="intervalo-cabecalho">
+                                    <button
+                                        type="button"
+                                        class="botao-tempo tabular"
+                                        @click="$store.anotai.selecionarIntervalo(inter, true)"
+                                        :title="`Reproduzir a partir de ${$store.anotai.formatarTempo(inter.inicio)}`"
+                                    >
+                                        <span x-text="`#${inter.ordem}`"></span>
+                                        <span x-text="`${$store.anotai.formatarTempo(inter.inicio)} – ${$store.anotai.formatarTempo(inter.fim)}`"></span>
+                                    </button>
+
+                                    <div class="intervalo-badges">
+                                        <button
+                                            type="button"
+                                            class="botao-secundario botao-compacto"
+                                            @click="$store.anotai.abrirRevisao(inter)"
+                                        >
+                                            Revisar
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <p
+                                    class="intervalo-texto"
+                                    @click="$store.anotai.selecionarIntervalo(inter, true)"
+                                    x-text="inter.texto"
+                                ></p>
+
+                                <div
+                                    class="vinculos-lista"
+                                    x-show="inter.vinculo && (!inter.vinculo.abstido || inter.vinculo.justificativa)"
+                                >
+                                    <div
+                                        class="vinculos-grupo"
+                                        x-show="!inter.vinculo?.abstido && (inter.vinculo?.ids_paginas || []).length > 0"
+                                    >
+                                        <span class="vinculos-grupo-rotulo">Páginas</span>
+                                        <div class="vinculos-chips">
+                                            <template
+                                                x-for="idPag in (inter.vinculo ? inter.vinculo.ids_paginas : [])"
+                                                :key="idPag"
+                                            >
+                                                <span class="chip-vinculo chip-pagina">
+                                                    <button
+                                                        type="button"
+                                                        class="chip-acao"
+                                                        title="Ir para esta página no PDF"
+                                                        @click="$store.anotai.irParaPagina($store.anotai.numeroPaginaPorId(idPag))"
+                                                        x-text="`Página ${$store.anotai.numeroPaginaPorId(idPag)}`"
+                                                    ></button>
+                                                    <button
+                                                        type="button"
+                                                        class="chip-remover"
+                                                        title="Remover esta página do vínculo"
+                                                        @click="$store.anotai.removerAlvoVinculo(inter, { id_pagina: idPag })"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </span>
+                                            </template>
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        class="vinculos-grupo"
+                                        x-show="!inter.vinculo?.abstido && (inter.vinculo?.ids_unidades || []).length > 0"
+                                    >
+                                        <span class="vinculos-grupo-rotulo">Trechos</span>
+                                        <div class="vinculos-chips">
+                                            <template
+                                                x-for="idUnid in (inter.vinculo ? inter.vinculo.ids_unidades : [])"
+                                                :key="idUnid"
+                                            >
+                                                <span class="chip-vinculo chip-unidade">
+                                                    <button
+                                                        type="button"
+                                                        class="chip-acao"
+                                                        title="Destacar este trecho no PDF"
+                                                        @click="$store.anotai.focarUnidadeDoChip(inter, idUnid)"
+                                                        x-text="$store.anotai.descricaoUnidadePorId(idUnid)"
+                                                    ></button>
+                                                    <button
+                                                        type="button"
+                                                        class="chip-remover"
+                                                        title="Remover este trecho do vínculo"
+                                                        @click="$store.anotai.removerAlvoVinculo(inter, { id_unidade: idUnid })"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </span>
+                                            </template>
+                                        </div>
+                                    </div>
+
+                                    <template x-if="$store.anotai.resumoJustificativa(inter.vinculo)?.ehEstruturada">
+                                        <div class="vinculos-grupo">
+                                            <span class="vinculos-grupo-rotulo">Critério</span>
+                                            <div class="justificativa-metricas tabular">
+                                                <template
+                                                    x-for="item in $store.anotai.resumoJustificativa(inter.vinculo).itens"
+                                                    :key="item.rotulo"
+                                                >
+                                                    <span class="justificativa-pill">
+                                                        <span x-text="item.rotulo"></span>
+                                                        <strong x-text="item.valor"></strong>
+                                                    </span>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+
+                                    <template x-if="$store.anotai.resumoJustificativa(inter.vinculo) && !$store.anotai.resumoJustificativa(inter.vinculo).ehEstruturada">
+                                        <p
+                                            class="vinculo-justificativa"
+                                            x-text="$store.anotai.resumoJustificativa(inter.vinculo).texto"
+                                        ></p>
+                                    </template>
+                                </div>
+
+                                <!-- Segmentos cronológicos atômicos -->
+                                <details class="gaveta-segmentos">
+                                    <summary
+                                        class="tabular"
+                                        x-text="`Segmentos (${$store.anotai.segmentosDoIntervalo(inter).length})`"
+                                    ></summary>
+                                    <ul class="lista-segmentos">
+                                        <template
+                                            x-for="seg in $store.anotai.segmentosDoIntervalo(inter)"
+                                            :key="seg.id_segmento"
+                                        >
+                                            <li
+                                                class="segmento-linha"
+                                                :class="{ 'is-ativo': $store.anotai.segmentoAtivoId === seg.id_segmento }"
+                                                @click="$store.anotai.selecionarSegmento(seg)"
+                                            >
+                                                <span
+                                                    class="segmento-tempo tabular"
+                                                    x-text="`${$store.anotai.formatarTempo(seg.inicio)}`"
+                                                ></span>
+                                                <span x-text="seg.texto"></span>
+                                            </li>
+                                        </template>
+                                    </ul>
+                                </details>
+
+                                <!-- Editor de Revisão Manual -->
+                                <div
+                                    class="editor-revisao"
+                                    x-show="$store.anotai.revisaoAbertaId === inter.id_intervalo"
+                                >
+                                    <div class="revisao-topo">
+                                        <strong>Revisão manual de vínculos</strong>
+                                        <button
+                                            type="button"
+                                            class="botao-secundario botao-compacto"
+                                            @click="$store.anotai.vincularPaginaAtualAoRascunho()"
+                                        >
+                                            + Vincular página atual (<span x-text="$store.anotai.paginaAtual"></span>)
+                                        </button>
+                                    </div>
+
+                                    <div class="grade-campos grade-2">
+                                        <div class="campo-grupo">
+                                            <label class="campo-rotulo">Tipo de relação</label>
+                                            <select x-model="$store.anotai.rascunhoRevisao.tipo_relacao">
+                                                <option value="direct">Explicação direta (direct)</option>
+                                                <option value="reference">Referência (reference)</option>
+                                                <option value="contextualization">Contextualização (contextualization)</option>
+                                            </select>
+                                        </div>
+                                        <div class="campo-grupo">
+                                            <label class="campo-rotulo">Justificativa</label>
+                                            <input
+                                                type="text"
+                                                x-model="$store.anotai.rascunhoRevisao.justificativa"
+                                                placeholder="Opcional"
+                                            >
+                                        </div>
+                                    </div>
+
+                                    <div class="revisao-selecionados">
+                                        <span class="campo-rotulo">Páginas selecionadas:</span>
+                                        <span
+                                            class="subtexto"
+                                            x-show="$store.anotai.rascunhoRevisao.ids_paginas.length === 0"
+                                        >
+                                            Nenhuma (resultará em abstenção ∅)
+                                        </span>
+                                        <div class="vinculos-chips">
+                                            <template
+                                                x-for="(pid, idx) in $store.anotai.rascunhoRevisao.ids_paginas"
+                                                :key="pid"
+                                            >
+                                                <span class="chip-vinculo chip-pagina">
+                                                    <span x-text="`Página ${$store.anotai.numeroPaginaPorId(pid)}`"></span>
+                                                    <button
+                                                        type="button"
+                                                        class="chip-remover"
+                                                        @click="$store.anotai.rascunhoRevisao.ids_paginas.splice(idx, 1)"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </span>
+                                            </template>
+                                        </div>
+                                    </div>
+
+                                    <div class="revisao-acoes">
+                                        <button
+                                            type="button"
+                                            class="botao-primario botao-compacto"
+                                            :disabled="$store.anotai.salvandoRevisao"
+                                            @click="$store.anotai.salvarRevisaoManual(inter)"
+                                        >
+                                            Salvar revisão
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="botao-secundario botao-compacto"
+                                            :disabled="$store.anotai.salvandoRevisao"
+                                            @click="$store.anotai.marcarAbstencaoManual(inter)"
+                                        >
+                                            Marcar abstenção (∅)
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="botao-secundario botao-compacto"
+                                            @click="$store.anotai.revisaoAbertaId = null"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </div>
+                            </li>
+                        </template>
+                    </ol>
+                </section>
+
+                <!-- Painel Direito: Visualizador de PDF e Unidades Documentais -->
+                <section class="painel painel-pdf">
+                    <div class="pdf-toolbar">
+                        <div class="pdf-nav-paginas tabular">
+                            <button
+                                type="button"
+                                class="botao-secundario botao-compacto"
+                                :disabled="$store.anotai.paginaAtual <= 1"
+                                @click="$store.anotai.irParaPagina($store.anotai.paginaAtual - 1)"
+                            >
+                                Anterior
+                            </button>
+                            <span x-text="`Página ${$store.anotai.paginaAtual} de ${$store.anotai.totalPaginasDocumento}`"></span>
+                            <button
+                                type="button"
+                                class="botao-secundario botao-compacto"
+                                :disabled="$store.anotai.paginaAtual >= $store.anotai.totalPaginasDocumento"
+                                @click="$store.anotai.irParaPagina($store.anotai.paginaAtual + 1)"
+                            >
+                                Próxima
+                            </button>
+                        </div>
+
+                        <div class="pdf-controles-extras">
+                            <button
+                                type="button"
+                                class="botao-secundario botao-compacto"
+                                @click="$store.anotai.alterarZoom(-0.15)"
+                            >
+                                - Zoom
+                            </button>
+                            <span class="tabular" x-text="`${Math.round($store.anotai.zoomPdf * 100)}%`"></span>
+                            <button
+                                type="button"
+                                class="botao-secundario botao-compacto"
+                                @click="$store.anotai.alterarZoom(0.15)"
+                            >
+                                + Zoom
+                            </button>
+                            <button
+                                type="button"
+                                class="botao-secundario botao-compacto"
+                                :class="{ 'ativo-filtro': $store.anotai.paginaFiltroId === $store.anotai.paginaAtualObj?.id_pagina }"
+                                @click="$store.anotai.filtrarPorPaginaAtual()"
+                            >
+                                Filtrar página
+                            </button>
+                            <button
+                                type="button"
+                                class="botao-primario botao-compacto"
+                                :disabled="$store.anotai.intervalosDaPaginaAtual.length === 0"
+                                @click="$store.anotai.irParaAudioDaPaginaAtual()"
+                            >
+                                Ir ao áudio (<span x-text="$store.anotai.intervalosDaPaginaAtual.length"></span>)
+                            </button>
+                        </div>
+                    </div>
+
+                    <p class="subtexto" x-show="$store.anotai.avisoPdf" x-text="$store.anotai.avisoPdf"></p>
+
+                    <div class="pdf-palco-wrapper">
+                        <div x-ref="pdfContainer" id="pdf-viewer-container"></div>
+                    </div>
+
+                    <div class="unidades-pagina-bloco">
+                        <div class="unidades-cabecalho">
+                            <h3>Unidades documentais da página <span x-text="$store.anotai.paginaAtual"></span></h3>
+                            <span
+                                class="subtexto tabular"
+                                x-text="`${$store.anotai.unidadesPaginaAtualFiltradas.length} unidades`"
+                            ></span>
+                        </div>
+                        <ul class="lista-unidades-pagina">
+                            <template
+                                x-for="unid in $store.anotai.unidadesPaginaAtualFiltradas"
+                                :key="unid.id_unidade"
+                            >
+                                <li
+                                    class="unidade-item"
+                                    :class="{
+                                        'is-destacada': $store.anotai.unidadeEstaDestacada(unid.id_unidade),
+                                        'is-focada': $store.anotai.unidadeSelecionadaId === unid.id_unidade
+                                    }"
+                                >
+                                    <div class="unidade-item-topo">
+                                        <span class="badge-unidade tabular" x-text="`${unid.tipo} #${unid.ordem_leitura}`"></span>
+                                        <div class="unidade-item-acoes">
+                                            <button
+                                                type="button"
+                                                class="botao-secundario botao-compacto"
+                                                x-show="$store.anotai.unidadePossuiVinculo(unid.id_unidade)"
+                                                @click="$store.anotai.selecionarUnidadeNoPdf(unid)"
+                                            >
+                                                Localizar áudio
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="botao-primario botao-compacto"
+                                                x-show="$store.anotai.revisaoAbertaId !== null"
+                                                @click="$store.anotai.alternarUnidadeNoRascunho(unid)"
+                                                x-text="$store.anotai.rascunhoRevisao.ids_unidades.includes(unid.id_unidade) ? 'Remover da revisão' : 'Incluir na revisão'"
+                                            ></button>
+                                        </div>
+                                    </div>
+                                    <p
+                                        class="unidade-item-texto"
+                                        x-text="unid.texto || '(Unidade visual sem transcrição textual)'"
+                                    ></p>
+                                </li>
+                            </template>
+                        </ul>
+                    </div>
+                </section>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

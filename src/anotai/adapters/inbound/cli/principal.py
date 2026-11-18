@@ -25,6 +25,10 @@ from anotai.adapters.inbound.cli.comando_transcrever import (
     configurar_parser_transcrever,
     executar_comando_transcrever,
 )
+from anotai.adapters.inbound.cli.comando_web import (
+    configurar_parser_web,
+    executar_comando_web,
+)
 from anotai.adapters.inbound.cli.formatador_terminal import formatar_aula_texto
 from anotai.adapters.outbound.persistence import RepositorioAulaSQLite
 from anotai.application.use_cases import TranscreverAula
@@ -57,6 +61,10 @@ def listar_itens(args: argparse.Namespace, settings: Settings) -> int:
     return executar_comando_listar(args, settings)
 
 
+def iniciar_web(args: argparse.Namespace, settings: Settings) -> int:
+    return executar_comando_web(args, settings)
+
+
 def criar_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="anotai",
@@ -70,6 +78,7 @@ def criar_parser() -> argparse.ArgumentParser:
     configurar_parser_buscar(subparsers)
     configurar_parser_alinhar(subparsers)
     configurar_parser_listar(subparsers)
+    configurar_parser_web(subparsers)
 
     return parser
 
@@ -88,6 +97,7 @@ def main(argumentos: list[str] | None = None) -> int:
         "buscar",
         "alinhar",
         "listar",
+        "web",
         "-h",
         "--help",
     ):
@@ -121,6 +131,8 @@ def main(argumentos: list[str] | None = None) -> int:
         return alinhar_aula(args, settings)
     if args.subcomando == "listar":
         return listar_itens(args, settings)
+    if args.subcomando == "web":
+        return iniciar_web(args, settings)
 
     parser.print_help()
     return 0
@@ -137,6 +149,7 @@ __all__ = [
     "criar_parser",
     "exibir_aula",
     "formatar_aula_texto",
+    "iniciar_web",
     "listar_itens",
     "main",
     "processar_pdf",
