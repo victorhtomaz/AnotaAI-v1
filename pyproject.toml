@@ -5,14 +5,17 @@ description = "Alinhamento temporal e recuperação documental em aulas gravadas
 requires-python = "==3.12.*"
 dependencies = [
     "bm25s>=0.3.16",
+    "fastapi>=0.115.0",
     "numpy>=2.0",
     "ollama>=0.6.3",
     "pymupdf>=2.0",
     "python-dotenv>=1.0",
+    "python-multipart>=0.0.9",
     "sqlalchemy>=2.0",
     "torch>=2.8.0",
     "torchaudio>=2.8.0",
     "torchvision>=0.23.0",
+    "uvicorn>=0.30.0",
     "whisperx>=3.8.6",
 ]
 

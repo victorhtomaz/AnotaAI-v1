@@ -297,7 +297,7 @@ class GerenciadorProcessamento:
             ),
             etapa_ocr=StatusEtapa(
                 chave="ocr",
-                titulo="2. OCR visual (Ollama)",
+                titulo="2. OCR visual",
                 estado="aguardando",
                 resumo=(
                     f"Configurado com {opcoes.modelo_visual}"
@@ -307,7 +307,7 @@ class GerenciadorProcessamento:
             ),
             etapa_transcricao=StatusEtapa(
                 chave="transcricao",
-                titulo="3. Transcrição (WhisperX)",
+                titulo="3. Transcrição",
                 estado="aguardando",
                 resumo=f"Modelo {opcoes.modelo_whisperx} ({opcoes.dispositivo_whisperx})",
             ),

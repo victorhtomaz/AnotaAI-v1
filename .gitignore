@@ -21,4 +21,5 @@ data/processados/transcricoes_brutas/*.json
 .ruff_cache/
 .pytest_cache/
 
+.agents
 AGENTS.MD

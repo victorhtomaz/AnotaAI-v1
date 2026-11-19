@@ -1,6 +1,26 @@
 (() => {
     "use strict";
 
+    const TIPOS_UNIDADE_PT = {
+        title: "Título",
+        section_header: "Seção",
+        paragraph: "Parágrafo",
+        list_item: "Item",
+        table: "Tabela",
+        figure: "Figura",
+        caption: "Legenda",
+        equation: "Equação",
+        code: "Código",
+        header: "Cabeçalho",
+        footer: "Rodapé",
+    };
+
+    function traduzirTipoUnidade(tipo) {
+        return TIPOS_UNIDADE_PT[tipo] || tipo || "Unidade";
+    }
+
+    window.traduzirTipoUnidade = traduzirTipoUnidade;
+
     let _pdfjsLibCache = null;
 
     async function obterPdfJs() {
@@ -138,7 +158,7 @@
     }
 
     async definirZoom(novaEscala) {
-        const ajustado = Math.max(0.5, Math.min(2.5, Number(novaEscala) || 1.0));
+        const ajustado = Math.max(0.25, Math.min(2.5, Number(novaEscala) || 1.0));
         this.zoom = Math.round(ajustado * 100) / 100;
         await this._renderizarPaginaAtual();
         return this.zoom;
@@ -146,6 +166,12 @@
 
     async ajustarZoom(delta) {
         return this.definirZoom(this.zoom + delta);
+    }
+
+    async ajustarLargura() {
+        const paginaMeta = this.mapaPaginas.get(this.paginaAtual);
+        const novaEscala = this._calcularZoomInicial(paginaMeta);
+        return this.definirZoom(novaEscala);
     }
 
     destacarUnidades(idsUnidades = [], metadados = {}) {
@@ -159,15 +185,24 @@
         const larguraPag = paginaMeta?.largura || 612;
         const alturaPag = paginaMeta?.altura || 792;
         const wrapper = this.containerEl?.parentElement;
-        const larguraDisp = (wrapper?.clientWidth || Math.round(window.innerWidth * 0.62)) - 36;
-        const alturaDisp = (wrapper?.clientHeight || Math.round(window.innerHeight * 0.72)) - 36;
+        const estilo = wrapper ? window.getComputedStyle(wrapper) : null;
+        const padX = estilo
+            ? parseFloat(estilo.paddingLeft) + parseFloat(estilo.paddingRight) + 8
+            : 40;
+        const padY = estilo
+            ? parseFloat(estilo.paddingTop) + parseFloat(estilo.paddingBottom) + 8
+            : 40;
+        const larguraDisp =
+            (wrapper?.clientWidth || Math.round(window.innerWidth * 0.52)) - padX;
+        const alturaDisp =
+            (wrapper?.clientHeight || Math.round(window.innerHeight * 0.68)) - padY;
         if (larguraDisp <= 100) {
             return 0.85;
         }
         const escalaLargura = larguraDisp / larguraPag;
         const escalaAltura = alturaDisp > 100 ? alturaDisp / alturaPag : escalaLargura;
         const escala = Math.min(escalaLargura, escalaAltura);
-        return Math.max(0.5, Math.min(1.5, Math.round(escala * 100) / 100));
+        return Math.max(0.25, Math.min(1.5, Math.floor(escala * 100) / 100));
     }
 
     _urlImagemPagina(numeroPagina) {
@@ -325,9 +360,9 @@
 
         const ctx = this.canvasEl.getContext("2d");
         if (ctx) {
-            ctx.fillStyle = "#fbfaf6";
+            ctx.fillStyle = "#f8f8f6";
             ctx.fillRect(0, 0, larguraPx, alturaPx);
-            ctx.strokeStyle = "#c8c4b8";
+            ctx.strokeStyle = "#bfc8c9";
             ctx.lineWidth = 1;
             ctx.strokeRect(0.5, 0.5, larguraPx - 1, alturaPx - 1);
         }
@@ -401,16 +436,17 @@
             botao.style.width = `${w_pct}%`;
             botao.style.height = `${h_pct}%`;
 
+            const tipoPt = traduzirTipoUnidade(unidade.tipo);
             const resumoTexto = unidade.texto ? unidade.texto.slice(0, 120) : "Unidade visual";
-            botao.title = `[${unidade.tipo} #${unidade.ordem_leitura}] ${resumoTexto}`;
+            botao.title = `[${tipoPt} #${unidade.ordem_leitura}] ${resumoTexto}`;
             botao.setAttribute(
                 "aria-label",
-                `Unidade ${unidade.ordem_leitura} (${unidade.tipo}) na página ${paginaMeta.numero_pagina}: ${resumoTexto}`
+                `Unidade ${unidade.ordem_leitura} (${tipoPt}) na página ${paginaMeta.numero_pagina}: ${resumoTexto}`
             );
 
             const etiqueta = document.createElement("span");
             etiqueta.className = "pdf-bbox-etiqueta";
-            etiqueta.textContent = `${unidade.tipo} #${unidade.ordem_leitura}`;
+            etiqueta.textContent = `${tipoPt} #${unidade.ordem_leitura}`;
             botao.appendChild(etiqueta);
 
             botao.addEventListener("click", (ev) => {

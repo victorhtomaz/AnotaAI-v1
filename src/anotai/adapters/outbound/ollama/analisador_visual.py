@@ -93,9 +93,8 @@ gráfico, foto) e como se relacionam ao texto.
 - Descreva só o que está visível. Não invente nem complete texto ilegível, e não acrescente \
 conhecimento externo.
 
-Exemplo: {{"tipo": "conteudo", "units": [{{"type": "figure", "text": "Slide 'Ciclo de Krebs' \
-com tópicos sobre a matriz mitocondrial e a produção de NADH, FADH2 e ATP; à direita, diagrama \
-circular com as etapas e compostos rotulados (citrato, isocitrato, oxaloacetato)."}}]}}"""
+Exemplo de saída: {{"tipo": "conteudo", "units": [{{"type": "figure", \
+"text": "<síntese objetiva apenas do que está visível nesta imagem>"}}]}}"""
 
 
 class ClienteOllama(Protocol):

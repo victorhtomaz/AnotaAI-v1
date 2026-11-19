@@ -280,7 +280,7 @@ def test_spa_index_assets_locais_e_opcoes_padrao(tmp_path: Path) -> None:
         assert arquivo.is_file(), f"Arquivo estático ausente: {arquivo}"
 
     css_texto = (DIRETORIO_STATIC / "css" / "styles.css").read_text(encoding="utf-8").lower()
-    assert "#206565" in css_texto
+    assert "#1f5e63" in css_texto
     assert "#e8e6df" in css_texto
     assert mimetypes.guess_type("pdf.min.mjs")[0] in (
         "application/javascript",
