@@ -9,6 +9,11 @@
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231f5e63'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='system-ui,sans-serif' font-size='18' font-weight='700' fill='%23ffffff'%3EA%3C/text%3E%3C/svg%3E">
     <link rel="stylesheet" href="/static/css/styles.css">
     <script defer src="/static/js/pdf-viewer.js"></script>
+    <script defer src="/static/js/formatters.js"></script>
+    <script defer src="/static/js/api.js"></script>
+    <script defer src="/static/js/modulo-importacao.js"></script>
+    <script defer src="/static/js/modulo-explorador.js"></script>
+    <script defer src="/static/js/modulo-revisao.js"></script>
     <script defer src="/static/js/app.js"></script>
     <script defer src="/static/vendor/alpine.min.js"></script>
 </head>
@@ -231,8 +236,8 @@
                                             x-model="$store.anotai.opcoes.metodo_pdf"
                                         >
                                         <span>
-                                            <strong>Nativa + OCR visual (Ollama)</strong>
-                                            <small>Aciona visão local apenas em páginas gráficas ou digitalizadas.</small>
+                                            <strong>Nativa + OCR visual</strong>
+                                            <small>Analisa páginas gráficas ou digitalizadas automaticamente.</small>
                                         </span>
                                     </label>
                                     <label class="opcao-radio">
@@ -244,7 +249,7 @@
                                         >
                                         <span>
                                             <strong>Somente extração nativa</strong>
-                                            <small>Mais rápido; ignora análise visual via Ollama.</small>
+                                            <small>Mais rápido; lê apenas o texto selecionável do documento.</small>
                                         </span>
                                     </label>
                                 </div>
@@ -256,8 +261,8 @@
                             x-show="$store.anotai.opcoes.executar_transcricao"
                         >
                             <div class="secao-cabecalho">
-                                <h2>Gravação da aula (Áudio e ASR)</h2>
-                                <span class="secao-nota">WhisperX e intervalos explicativos</span>
+                                <h2>Gravação da aula (Áudio e transcrição)</h2>
+                                <span class="secao-nota">Transcrição de fala e intervalos explicativos</span>
                             </div>
 
                             <div class="grade-campos grade-2">
@@ -335,7 +340,7 @@
                                         name="dispositivo_whisperx"
                                         x-model="$store.anotai.opcoes.dispositivo_whisperx"
                                     >
-                                        <option value="cuda">CUDA (GPU)</option>
+                                        <option value="cuda">Placa de vídeo (GPU)</option>
                                         <option value="cpu">CPU</option>
                                         <option value="auto">Automático</option>
                                     </select>
@@ -456,10 +461,10 @@
                                         x-model="$store.anotai.opcoes.modo_alinhamento"
                                         @change="$store.anotai.aplicarPresetAlinhamento()"
                                     >
-                                        <option value="padrao">Padrão — Hierárquico HMM + Híbrido (BM25 + Embeddings)</option>
-                                        <option value="rapido">Rápido — Hierárquico Kernel + BM25</option>
-                                        <option value="semantico">Semântico — Embeddings Ollama</option>
-                                        <option value="lexical">Lexical — BM25 independente</option>
+                                        <option value="padrao">Padrão — Hierárquico com contexto temporal e busca híbrida</option>
+                                        <option value="rapido">Rápido — Hierárquico por vizinhança e busca textual</option>
+                                        <option value="semantico">Semântico — Correspondência por significado</option>
+                                        <option value="lexical">Lexical — Correspondência por termos exatos</option>
                                         <option value="personalizado">Personalizado (combinar parâmetros abaixo)</option>
                                     </select>
                                 </div>
@@ -479,6 +484,8 @@
                                     >
                                         <option value="hierarchical">Hierárquica (página e unidade)</option>
                                         <option value="temporal">Por página (sem unidade)</option>
+                                        <option value="embedding">Semântica direta</option>
+                                        <option value="bm25">Lexical direta</option>
                                     </select>
                                 </div>
                                 <div class="campo-grupo">
@@ -489,9 +496,9 @@
                                         x-model="$store.anotai.opcoes.estrategia_base"
                                         @change="$store.anotai.marcarPerfilPersonalizado()"
                                     >
-                                        <option value="hybrid">Híbrido (BM25 + Embeddings)</option>
-                                        <option value="bm25">BM25 (lexical)</option>
-                                        <option value="embedding">Embeddings (semântico)</option>
+                                        <option value="hybrid">Híbrido (lexical + semântico)</option>
+                                        <option value="bm25">Lexical (termos exatos)</option>
+                                        <option value="embedding">Semântico (significado)</option>
                                     </select>
                                 </div>
                                 <div class="campo-grupo">
@@ -502,8 +509,8 @@
                                         x-model="$store.anotai.opcoes.modelo_temporal"
                                         @change="$store.anotai.marcarPerfilPersonalizado()"
                                     >
-                                        <option value="hmm">HMM (forward-backward)</option>
-                                        <option value="kernel">Kernel de vizinhança</option>
+                                        <option value="hmm">Sequencial contínuo</option>
+                                        <option value="kernel">Vizinhança local</option>
                                         <option value="none">Sem contexto temporal</option>
                                     </select>
                                 </div>
@@ -876,6 +883,7 @@
                             <template x-for="doc in $store.anotai.documentos" :key="doc.id_documento">
                                 <option
                                     :value="doc.id_documento"
+                                    :selected="$store.anotai.documentoAtivo?.id_documento === doc.id_documento"
                                     x-text="doc.titulo_aula ? `${doc.titulo_documento} — ${doc.titulo_aula}` : doc.titulo_documento"
                                 ></option>
                             </template>
@@ -991,7 +999,11 @@
                                 x-for="opc in $store.anotai.opcoesAlinhamentoDisponiveis"
                                 :key="opc.valor"
                             >
-                                <option :value="opc.valor" x-text="opc.rotulo"></option>
+                                <option
+                                    :value="opc.valor"
+                                    :selected="$store.anotai.estrategiaAlinhamentoAtiva === opc.valor"
+                                    x-text="opc.rotulo"
+                                ></option>
                             </template>
                         </select>
                     </div>

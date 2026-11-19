@@ -105,6 +105,11 @@ class SegmentoTranscricaoSchema(BaseModel):
     confianca: float | None = None
 
 
+class MetricaJustificativaSchema(BaseModel):
+    rotulo: str
+    valor: str
+
+
 class VinculoIntervaloSchema(BaseModel):
     id_alinhamento: str
     id_intervalo: str
@@ -121,6 +126,7 @@ class VinculoIntervaloSchema(BaseModel):
     tipo_relacao: str | None = None
     confianca: float
     justificativa: str | None = None
+    metricas: list[MetricaJustificativaSchema] | None = None
 
 
 class IntervaloExplicativoSchema(BaseModel):

@@ -22,6 +22,42 @@ from anotai.domain.value_objects import (
 from anotai.domain.value_objects.evidencia_recuperacao import TIPOS_UNIDADES_VISUAIS
 
 
+def resolver_preset_alinhamento(
+    modo_alinhamento: str,
+    estrategia_alinhamento: str = "hierarchical",
+    estrategia_base: str = "hybrid",
+    modelo_temporal: str = "hmm",
+) -> tuple[str, str, str]:
+    """Resolve o preset de alinhamento para (estrategia, estrategia_base, modelo_temporal)."""
+    mapa_presets = {
+        "padrao": ("hierarchical", "hybrid", "hmm"),
+        "hmm": ("hierarchical", "bm25", "hmm"),
+        "rapido": ("hierarchical", "bm25", "kernel"),
+        "kernel": ("hierarchical", "bm25", "kernel"),
+        "semantico": ("embedding", "embedding", "kernel"),
+        "lexical": ("bm25", "bm25", "kernel"),
+    }
+    modo = (modo_alinhamento or "padrao").strip().lower()
+    if modo in mapa_presets:
+        return mapa_presets[modo]
+
+    estrategia = estrategia_alinhamento.strip().lower()
+    base = estrategia_base.strip().lower()
+    temporal = modelo_temporal.strip().lower()
+    if temporal == "none":
+        if estrategia == "temporal":
+            estrategia = base
+        temporal = "kernel"
+    elif estrategia in ("temporal_hmm", "hierarchical_hmm"):
+        temporal = "hmm"
+    return estrategia, base, temporal
+
+
+def calcular_limiar_abstencao_efetivo(limiar_configurado: float, usa_hmm: bool) -> float:
+    """Retorna o limiar efetivo de abstenção usando o padrão recomendado por modelo."""
+    return limiar_configurado if limiar_configurado > 0.0 else (0.15 if usa_hmm else 0.25)
+
+
 class AlinharAula:
     """Caso de uso da Fase 6 para alinhamento hierárquico e temporal entre aula e PDF."""
 
@@ -375,6 +411,51 @@ class AlinharAula:
             self.repositorio_alinhamento.salvar(alinhamento)
 
         return alinhamento
+
+    def remover_alvo_manual(
+        self,
+        aula: Aula,
+        documento: Documento,
+        alinhamento: Alinhamento,
+        *,
+        id_pagina: str | None = None,
+        id_unidade: str | None = None,
+    ) -> Alinhamento:
+        """Remove uma unidade, página ou vínculo inteiro gerando revisão manual."""
+        if id_unidade:
+            novas_paginas = list(alinhamento.ids_paginas)
+            novas_unidades = [u for u in alinhamento.ids_unidades if u != id_unidade]
+            abster = not novas_paginas and not novas_unidades
+            justificativa = "Unidade removida manualmente na revisão"
+        elif id_pagina:
+            unidades_da_pagina = {
+                u.id_unidade
+                for p in documento.paginas
+                if p.id_pagina == id_pagina
+                for u in p.unidades
+            }
+            novas_paginas = [p for p in alinhamento.ids_paginas if p != id_pagina]
+            novas_unidades = [
+                u for u in alinhamento.ids_unidades if u not in unidades_da_pagina
+            ]
+            abster = not novas_paginas and not novas_unidades
+            justificativa = "Página removida manualmente na revisão"
+        else:
+            novas_paginas = []
+            novas_unidades = []
+            abster = True
+            justificativa = "Vínculo removido manualmente (abstenção explícita)"
+
+        return self.registrar_revisao_manual(
+            aula=aula,
+            documento=documento,
+            id_intervalo=alinhamento.id_intervalo,
+            ids_paginas=novas_paginas,
+            ids_unidades=novas_unidades,
+            abster=abster,
+            tipo_relacao=alinhamento.tipo_relacao or "direct",
+            justificativa=justificativa,
+        )
 
     def _avaliar_paginas_intervalo(
         self,

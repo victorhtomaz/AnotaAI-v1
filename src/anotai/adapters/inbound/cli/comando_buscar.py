@@ -4,13 +4,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from ollama import Client
-
 from anotai.adapters.inbound.cli.formatador_terminal import formatar_recuperacao_texto
-from anotai.adapters.outbound.ollama.provedor_embedding import ProvedorEmbeddingOllama
 from anotai.adapters.outbound.persistence import RepositorioAulaSQLite, RepositorioDocumento
-from anotai.adapters.outbound.search import IndiceBM25, IndiceEmbeddings, IndiceHibrido
 from anotai.application.use_cases.recuperar_candidatos import RecuperarCandidatos
+from anotai.bootstrap import construir_indices_busca
 from anotai.config import Settings
 from anotai.domain.exceptions import ErroBusca
 
@@ -178,29 +175,6 @@ def resolver_documento_cli(repo_doc: Any, termo_id: str | None) -> Any | None:
         return None
     print(f"Documento '{termo_id}' não encontrado no banco de dados.", file=sys.stderr)
     return None
-
-
-def construir_indices_busca(
-    estrategia_base: str, settings: Settings, modelo_override: str | None = None
-) -> tuple[Any, Any]:
-    if estrategia_base == "bm25":
-        return IndiceBM25(), IndiceBM25()
-
-    if estrategia_base in ("embedding", "hybrid"):
-        modelo_emb = modelo_override or settings.embedding_model
-        provedor = ProvedorEmbeddingOllama(
-            cliente=Client(host=settings.ollama_url),
-            modelo=modelo_emb,
-            manter_vivo=settings.ollama_keep_alive,
-        )
-        if estrategia_base == "embedding":
-            return IndiceEmbeddings(provedor), IndiceEmbeddings(provedor)
-        return (
-            IndiceHibrido(IndiceBM25(), IndiceEmbeddings(provedor)),
-            IndiceHibrido(IndiceBM25(), IndiceEmbeddings(provedor)),
-        )
-
-    raise ValueError(f"Estratégia base de busca não suportada: '{estrategia_base}'")
 
 
 def executar_comando_buscar(

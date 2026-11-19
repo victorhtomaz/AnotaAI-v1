@@ -55,6 +55,7 @@
         this.unidadeFocadaId = null;
         this._renderToken = 0;
         this._renderTask = null;
+        this._mapaUnidadesOverlay = new Map();
 
         this._garantirEstruturaDOM();
     }
@@ -81,6 +82,17 @@
 
         this.overlayLayerEl = document.createElement("div");
         this.overlayLayerEl.className = "pdf-overlay-layer";
+        this.overlayLayerEl.addEventListener("click", (ev) => {
+            const botao = ev.target?.closest?.(".pdf-bbox-item");
+            if (!botao || !this.overlayLayerEl.contains(botao)) {
+                return;
+            }
+            ev.stopPropagation();
+            const unidade = this._mapaUnidadesOverlay.get(botao.dataset.unidadeId);
+            if (unidade) {
+                this.callbacks.onClickUnidade?.(unidade);
+            }
+        });
 
         this.fallbackNoticeEl = document.createElement("div");
         this.fallbackNoticeEl.className = "pdf-fallback-aviso";
@@ -219,13 +231,17 @@
             if (!w || !h) {
                 return true;
             }
+            const data = ctx.getImageData(0, 0, w, h).data;
             const passos = 6;
             for (let ix = 1; ix < passos; ix++) {
                 for (let iy = 1; iy < passos; iy++) {
                     const x = Math.floor((w * ix) / passos);
                     const y = Math.floor((h * iy) / passos);
-                    const px = ctx.getImageData(x, y, 1, 1).data;
-                    if (px[3] > 0 && (px[0] < 252 || px[1] < 252 || px[2] < 252)) {
+                    const idx = (y * w + x) * 4;
+                    if (
+                        data[idx + 3] > 0 &&
+                        (data[idx] < 252 || data[idx + 1] < 252 || data[idx + 2] < 252)
+                    ) {
                         return false;
                     }
                 }
@@ -403,6 +419,7 @@
 
     _renderizarOverlays(paginaMeta) {
         this.overlayLayerEl.innerHTML = "";
+        this._mapaUnidadesOverlay.clear();
         const unidades = Array.isArray(paginaMeta.unidades) ? paginaMeta.unidades : [];
 
         const svgNS = "http://www.w3.org/2000/svg";
@@ -416,6 +433,7 @@
             if (!unidade.caixa) {
                 continue;
             }
+            this._mapaUnidadesOverlay.set(unidade.id_unidade, unidade);
             const { x_pct, y_pct, w_pct, h_pct } = unidade.caixa;
 
             const rect = document.createElementNS(svgNS, "rect");
@@ -448,11 +466,6 @@
             etiqueta.className = "pdf-bbox-etiqueta";
             etiqueta.textContent = `${tipoPt} #${unidade.ordem_leitura}`;
             botao.appendChild(etiqueta);
-
-            botao.addEventListener("click", (ev) => {
-                ev.stopPropagation();
-                this.callbacks.onClickUnidade?.(unidade);
-            });
 
             this.overlayLayerEl.appendChild(botao);
         }

@@ -12,17 +12,22 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from anotai.adapters.outbound.persistence import (
-    RepositorioAlinhamentoSQLite,
-    RepositorioAulaSQLite,
-    RepositorioDocumentoSQLite,
-)
 from anotai.application.use_cases import (
     AgrupadorIntervalos,
     AlinharAula,
     ImportarDocumento,
     RecuperarCandidatos,
     TranscreverAula,
+    calcular_limiar_abstencao_efetivo,
+    resolver_preset_alinhamento,
+)
+from anotai.bootstrap import (
+    construir_indices_busca,
+    criar_analisador_visual,
+    criar_extrator_documento,
+    criar_inspetor_audio,
+    criar_provedor_transcricao,
+    obter_classes_repositorios,
 )
 from anotai.config import Settings
 from anotai.domain.entities import Alinhamento, Aula, Documento
@@ -180,29 +185,13 @@ class TarefaProcessamento:
 
 
 def resolver_configuracao_alinhamento(opcoes: OpcoesProcessamento) -> tuple[str, str, str]:
-    """Resolve o preset de alinhamento para (estrategia, estrategia_base, modelo_temporal)."""
-    mapa_presets = {
-        "padrao": ("hierarchical", "hybrid", "hmm"),
-        "hmm": ("hierarchical", "bm25", "hmm"),
-        "rapido": ("hierarchical", "bm25", "kernel"),
-        "kernel": ("hierarchical", "bm25", "kernel"),
-        "semantico": ("embedding", "embedding", "kernel"),
-        "lexical": ("bm25", "bm25", "kernel"),
-    }
-    modo = (opcoes.modo_alinhamento or "padrao").strip().lower()
-    if modo in mapa_presets:
-        return mapa_presets[modo]
-
-    estrategia = opcoes.estrategia_alinhamento.strip().lower()
-    estrategia_base = opcoes.estrategia_base.strip().lower()
-    modelo_temporal = opcoes.modelo_temporal.strip().lower()
-    if modelo_temporal == "none":
-        if estrategia == "temporal":
-            estrategia = estrategia_base
-        modelo_temporal = "kernel"
-    elif estrategia in ("temporal_hmm", "hierarchical_hmm"):
-        modelo_temporal = "hmm"
-    return estrategia, estrategia_base, modelo_temporal
+    """Resolve o preset de alinhamento delegando à regra de aplicação."""
+    return resolver_preset_alinhamento(
+        modo_alinhamento=opcoes.modo_alinhamento,
+        estrategia_alinhamento=opcoes.estrategia_alinhamento,
+        estrategia_base=opcoes.estrategia_base,
+        modelo_temporal=opcoes.modelo_temporal,
+    )
 
 
 def higienizar_nome_arquivo(nome: str) -> str:
@@ -233,9 +222,9 @@ class GerenciadorProcessamento:
         self,
         settings: Settings,
         executar_sincrono: bool = False,
-        repo_doc_cls: Any = RepositorioDocumentoSQLite,
-        repo_aula_cls: Any = RepositorioAulaSQLite,
-        repo_alin_cls: Any = RepositorioAlinhamentoSQLite,
+        repo_doc_cls: Any = None,
+        repo_aula_cls: Any = None,
+        repo_alin_cls: Any = None,
         importar_doc_cls: Any = ImportarDocumento,
         transcrever_cls: Any = TranscreverAula,
         alinhar_cls: Any = AlinharAula,
@@ -247,11 +236,12 @@ class GerenciadorProcessamento:
         agrupador_cls: Any = AgrupadorIntervalos,
         indices_builder: Callable[..., tuple[Any, Any]] | None = None,
     ) -> None:
+        padrao_doc_cls, padrao_aula_cls, padrao_alin_cls = obter_classes_repositorios()
         self.settings = settings
         self.executar_sincrono = executar_sincrono
-        self._repo_doc_cls = repo_doc_cls
-        self._repo_aula_cls = repo_aula_cls
-        self._repo_alin_cls = repo_alin_cls
+        self._repo_doc_cls = repo_doc_cls or padrao_doc_cls
+        self._repo_aula_cls = repo_aula_cls or padrao_aula_cls
+        self._repo_alin_cls = repo_alin_cls or padrao_alin_cls
         self._importar_doc_cls = importar_doc_cls
         self._transcrever_cls = transcrever_cls
         self._alinhar_cls = alinhar_cls
@@ -266,7 +256,6 @@ class GerenciadorProcessamento:
         self._lock = threading.Lock()
         self._tarefas: dict[str, TarefaProcessamento] = {}
         self._eventos_cancelamento: dict[str, threading.Event] = {}
-        self._ultima_tarefa_id: str | None = None
         self._vinculos_doc_aula: dict[str, str] = {}
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="anotai-web")
 
@@ -300,7 +289,7 @@ class GerenciadorProcessamento:
                 titulo="2. OCR visual",
                 estado="aguardando",
                 resumo=(
-                    f"Configurado com {opcoes.modelo_visual}"
+                    "Análise visual de páginas gráficas habilitada"
                     if opcoes.metodo_pdf == "native_then_ocr"
                     else "Desativado (somente texto nativo)"
                 ),
@@ -309,7 +298,7 @@ class GerenciadorProcessamento:
                 chave="transcricao",
                 titulo="3. Transcrição",
                 estado="aguardando",
-                resumo=f"Modelo {opcoes.modelo_whisperx} ({opcoes.dispositivo_whisperx})",
+                resumo="Pronto para transcrever áudio e segmentar intervalos",
             ),
             etapa_alinhamento=StatusEtapa(
                 chave="alinhamento",
@@ -322,7 +311,6 @@ class GerenciadorProcessamento:
         with self._lock:
             self._tarefas[id_job] = tarefa
             self._eventos_cancelamento[id_job] = threading.Event()
-            self._ultima_tarefa_id = id_job
 
         if self.executar_sincrono:
             self._executar_pipeline(id_job, opcoes, caminho_pdf, caminho_audio)
@@ -338,13 +326,6 @@ class GerenciadorProcessamento:
     def obter_tarefa(self, id_job: str) -> TarefaProcessamento | None:
         with self._lock:
             tarefa = self._tarefas.get(id_job)
-            return tarefa.clonar() if tarefa is not None else None
-
-    def obter_ultima_tarefa(self) -> TarefaProcessamento | None:
-        with self._lock:
-            if self._ultima_tarefa_id is None:
-                return None
-            tarefa = self._tarefas.get(self._ultima_tarefa_id)
             return tarefa.clonar() if tarefa is not None else None
 
     def obter_aula_associada(self, id_documento: str) -> str | None:
@@ -490,9 +471,7 @@ class GerenciadorProcessamento:
                 t.etapa_pdf.resumo = f"Extraindo páginas e unidades de '{caminho_pdf.name}'"
                 if usa_ocr:
                     t.etapa_ocr.estado = "executando"
-                    t.etapa_ocr.resumo = (
-                        f"Detectando páginas visuais com {opcoes.modelo_visual}"
-                    )
+                    t.etapa_ocr.resumo = "Analisando páginas gráficas e digitalizadas"
                 else:
                     t.etapa_ocr.estado = "ignorado"
                     t.etapa_ocr.resumo = "Desativado (modo somente texto nativo)"
@@ -501,31 +480,20 @@ class GerenciadorProcessamento:
 
             analisador = None
             if usa_ocr:
-                from ollama import Client
-
-                analisador_cls = self._analisador_visual_cls
-                if analisador_cls is None:
-                    from anotai.adapters.outbound.ollama import AnalisadorVisualOllama
-
-                    analisador_cls = AnalisadorVisualOllama
-
-                analisador = analisador_cls(
-                    Client(host=self.settings.ollama_url),
+                analisador = criar_analisador_visual(
+                    self.settings,
                     opcoes.modelo_visual,
                     temperatura=opcoes.temperatura_visual,
                     seed=opcoes.seed_visual,
                     pensar=opcoes.pensar_visual,
-                    manter_vivo=self.settings.ollama_keep_alive,
+                    analisador_cls=self._analisador_visual_cls,
                 )
 
-            extrator_cls = self._extrator_pdf_cls
-            if extrator_cls is None:
-                from anotai.adapters.outbound.pdf import ExtratorPDF
-
-                extrator_cls = ExtratorPDF
-
+            extrator = criar_extrator_documento(
+                analisador, extrator_cls=self._extrator_pdf_cls
+            )
             caso_uso = self._importar_doc_cls(
-                extrator_cls(analisador),
+                extrator,
                 repositorio=repo_doc,
             )
             documento = caso_uso.executar(caminho_pdf, opcoes.metodo_pdf)
@@ -548,9 +516,7 @@ class GerenciadorProcessamento:
                 ]
                 if usa_ocr:
                     t.etapa_ocr.estado = "concluido"
-                    t.etapa_ocr.resumo = (
-                        f"Modelo {opcoes.modelo_visual} aplicado em páginas visuais"
-                    )
+                    t.etapa_ocr.resumo = "Análise visual aplicada em páginas gráficas"
                     t.etapa_ocr.metricas = [
                         ("Páginas com OCR", str(paginas_ocr)),
                         ("Unidades visuais", str(unidades_ocr)),
@@ -606,30 +572,17 @@ class GerenciadorProcessamento:
         if caminho_audio is not None and opcoes.executar_transcricao:
             def _iniciar_asr(t: TarefaProcessamento) -> None:
                 t.etapa_transcricao.estado = "executando"
-                t.etapa_transcricao.resumo = (
-                    f"Transcrevendo '{caminho_audio.name}' ({opcoes.modelo_whisperx})"
-                )
+                t.etapa_transcricao.resumo = f"Transcrevendo '{caminho_audio.name}'"
 
             self._atualizar(id_job, _iniciar_asr)
 
-            inspetor_cls = self._inspetor_audio_cls
-            if inspetor_cls is None:
-                from anotai.adapters.outbound.audio import InspetorFFmpeg
-
-                inspetor_cls = InspetorFFmpeg
-
-            provedor_cls = self._provedor_whisperx_cls
-            if provedor_cls is None:
-                from anotai.adapters.outbound.audio import ProvedorWhisperX
-
-                provedor_cls = ProvedorWhisperX
-
-            inspetor = inspetor_cls()
-            provedor = provedor_cls(
+            inspetor = criar_inspetor_audio(inspetor_cls=self._inspetor_audio_cls)
+            provedor = criar_provedor_transcricao(
                 modelo=opcoes.modelo_whisperx,
                 dispositivo=opcoes.dispositivo_whisperx,
                 tipo_computacao=opcoes.tipo_computacao,
                 alinhar_fonemas=opcoes.alinhar_fonemas,
+                provedor_cls=self._provedor_whisperx_cls,
             )
             agrupador = self._agrupador_cls(
                 limiar_silencio=opcoes.limiar_silencio,
@@ -720,17 +673,12 @@ class GerenciadorProcessamento:
         def _iniciar_alin(t: TarefaProcessamento) -> None:
             t.etapa_alinhamento.estado = "executando"
             t.etapa_alinhamento.resumo = (
-                f"Alinhando {len(aula.intervalos)} intervalos "
-                f"({estrategia} / {modelo_temporal} via {estrategia_busca})"
+                f"Alinhando {len(aula.intervalos)} intervalos explicativos"
             )
 
         self._atualizar(id_job, _iniciar_alin)
 
-        indices_builder = self._indices_builder
-        if indices_builder is None:
-            from anotai.adapters.inbound.cli.comando_buscar import construir_indices_busca
-
-            indices_builder = construir_indices_busca
+        indices_builder = self._indices_builder or construir_indices_busca
 
         idx_paginas, idx_unidades = indices_builder(
             estrategia_busca,
@@ -750,10 +698,8 @@ class GerenciadorProcessamento:
             and opcoes.modelo_temporal.strip().lower() == "none"
         )
         usa_hmm_efetivo = modelo_temporal == "hmm" and not sem_temporal
-        limiar_efetivo = (
-            opcoes.limiar_abstencao
-            if opcoes.limiar_abstencao > 0.0
-            else (0.15 if usa_hmm_efetivo else 0.25)
+        limiar_efetivo = calcular_limiar_abstencao_efetivo(
+            opcoes.limiar_abstencao, usa_hmm_efetivo
         )
         pesos = PesosAlinhamento(
             peso_similaridade=opcoes.peso_similaridade,
@@ -826,9 +772,7 @@ class GerenciadorProcessamento:
 
         def _finalizar_alin(t: TarefaProcessamento) -> None:
             t.etapa_alinhamento.estado = "concluido"
-            t.etapa_alinhamento.resumo = (
-                f"Alinhamento salvo com estratégia {estrategia} ({modelo_temporal})"
-            )
+            t.etapa_alinhamento.resumo = "Alinhamento salvo e indexado"
             t.etapa_alinhamento.metricas = [
                 ("Alinhados", f"{alinhados}/{total}"),
                 ("Abstenções", str(abstidos)),

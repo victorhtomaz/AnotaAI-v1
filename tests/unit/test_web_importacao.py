@@ -303,6 +303,8 @@ def test_spa_index_assets_locais_e_opcoes_padrao(tmp_path: Path) -> None:
     assert "$store.anotai.opcoesAlinhamentoDisponiveis" in html
     assert 'value="hierarchical_hmm"' not in html
     assert 'value="temporal_hmm"' not in html
+    for termo_tecnico in ("Ollama", "WhisperX", "BM25", "HMM", "CUDA", "Kernel", "ASR"):
+        assert termo_tecnico not in html
 
 
 def test_post_documentos_e_polling_status_job_json(tmp_path: Path) -> None:
@@ -759,3 +761,241 @@ def test_limiar_abstencao_padrao_hmm_e_sem_hmm(tmp_path: Path) -> None:
     assert resp_sem_hmm.status_code == 202
 
     assert limiares_capturados == [0.15, 0.25]
+
+
+def test_modulos_js_e_contratos_frontend_presentes(tmp_path: Path) -> None:
+    from anotai.adapters.inbound.web.gerenciador_processamento import (
+        OpcoesProcessamento,
+        resolver_configuracao_alinhamento,
+    )
+
+    cfg = _settings_isoladas(tmp_path)
+    app = criar_app(settings=cfg)
+    client = ClienteTesteASGI(app)
+
+    html = client.get("/").text
+    modulos_js = (
+        "formatters.js",
+        "api.js",
+        "modulo-importacao.js",
+        "modulo-explorador.js",
+        "modulo-revisao.js",
+        "app.js",
+        "pdf-viewer.js",
+    )
+    for nome in modulos_js:
+        caminho = DIRETORIO_STATIC / "js" / nome
+        assert caminho.is_file(), f"Módulo JS ausente: {caminho}"
+        assert f"/static/js/{nome}" in html
+
+    assert "formEl.reset()" not in (DIRETORIO_STATIC / "js" / "modulo-importacao.js").read_text(
+        encoding="utf-8"
+    )
+    app_js = (DIRETORIO_STATIC / "js" / "app.js").read_text(encoding="utf-8")
+    assert "Object.getOwnPropertyDescriptors" in app_js
+
+    imp_js = (DIRETORIO_STATIC / "js" / "modulo-importacao.js").read_text(encoding="utf-8")
+    for modo in ("padrao", "rapido", "semantico", "lexical"):
+        estrategia, base, temporal = resolver_configuracao_alinhamento(
+            OpcoesProcessamento(modo_alinhamento=modo)
+        )
+        assert f'estrategia: "{estrategia}"' in imp_js
+        assert f'base: "{base}"' in imp_js
+        assert f'temporal: "{temporal}"' in imp_js
+
+
+def test_upload_ignorado_quando_etapa_desmarcada_e_streaming(tmp_path: Path) -> None:
+    cfg = _settings_isoladas(tmp_path)
+
+    class FakeTranscreverMinimo:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def executar(self, caminho: Path, titulo: str | None = None) -> Aula:
+            return _aula_ficticia(caminho)
+
+    gestor = GerenciadorProcessamento(
+        settings=cfg,
+        executar_sincrono=True,
+        repo_doc_cls=lambda _: MagicMock(),
+        repo_aula_cls=lambda _: MagicMock(),
+        repo_alin_cls=lambda _: MagicMock(),
+        transcrever_cls=FakeTranscreverMinimo,
+        inspetor_audio_cls=lambda: MagicMock(),
+        provedor_whisperx_cls=lambda **kwargs: MagicMock(),
+    )
+    app = criar_app(settings=cfg, gerenciador=gestor)
+    client = ClienteTesteASGI(app)
+
+    conteudo_audio = b"RIFF" + (b"A" * 2048)
+    resp1 = client.post(
+        "/api/documentos",
+        files={
+            "arquivo_pdf": ("ignorado.pdf", b"%PDF-1.4 nao deve salvar", "application/pdf"),
+            "arquivo_audio": ("aula.wav", conteudo_audio, "audio/wav"),
+        },
+        data={"executar_transcricao": "on"},
+    )
+    assert resp1.status_code == 202
+
+    arquivos_salvos = sorted(p.name for p in gestor.diretorio_uploads.iterdir())
+    assert arquivos_salvos == ["aula.wav"]
+
+    resp2 = client.post(
+        "/api/documentos",
+        files={"arquivo_audio": ("aula.wav", conteudo_audio, "audio/wav")},
+        data={"executar_transcricao": "on"},
+    )
+    assert resp2.status_code == 202
+    arquivos_apos = sorted(p.name for p in gestor.diretorio_uploads.iterdir())
+    assert len(arquivos_apos) == 2
+    assert any(nome.startswith("aula-") and nome.endswith(".wav") for nome in arquivos_apos)
+
+
+def test_listar_documentos_sem_n_mais_um_e_404_sem_vazar_caminho(tmp_path: Path) -> None:
+    cfg = _settings_isoladas(tmp_path)
+    banco = Path(cfg.database_path)
+
+    pdf1 = tmp_path / "segredo_1.pdf"
+    pdf2 = tmp_path / "segredo_2.pdf"
+    audio1 = tmp_path / "audio_secreto.wav"
+    pdf1.write_bytes(b"%PDF-1.4")
+    pdf2.write_bytes(b"%PDF-1.4")
+    audio1.write_bytes(b"RIFF")
+
+    doc1 = _documento_ficticio(pdf1)
+    doc2 = Documento(
+        id_documento="doc-web-2",
+        uri_origem=str(pdf2),
+        titulo="Material Web 2",
+        paginas=[
+            PaginaDocumento(
+                id_pagina="doc-web-2-p1",
+                numero_pagina=1,
+                texto_nativo="Conteúdo doc 2",
+                texto_normalizado="Conteúdo doc 2",
+                metodo_extracao="native",
+                unidades=[],
+            )
+        ],
+        versao_processamento="v1",
+        proveniencia=doc1.proveniencia,
+    )
+    aula = _aula_ficticia(audio1)
+
+    repo_doc = RepositorioDocumentoSQLite(banco)
+    repo_aula = RepositorioAulaSQLite(banco)
+    repo_doc.salvar(doc1)
+    repo_doc.salvar(doc2)
+    repo_aula.salvar(aula)
+
+    app = criar_app(settings=cfg)
+    client = ClienteTesteASGI(app)
+
+    with patch.object(
+        RepositorioAulaSQLite, "listar", autospec=True, wraps=RepositorioAulaSQLite.listar
+    ) as spy_listar_aulas:
+        resp_lista = client.get("/api/documentos")
+        assert resp_lista.status_code == 200
+        assert len(resp_lista.json()) == 2
+        assert spy_listar_aulas.call_count == 1
+
+    pdf1.unlink()
+    audio1.unlink()
+
+    resp_pdf_404 = client.get("/api/documentos/doc-web-1/pdf")
+    assert resp_pdf_404.status_code == 404
+    assert str(tmp_path) not in resp_pdf_404.json()["detail"]
+
+    resp_img_404 = client.get("/api/documentos/doc-web-1/paginas/1/imagem")
+    assert resp_img_404.status_code == 404
+    assert str(tmp_path) not in resp_img_404.json()["detail"]
+
+    resp_audio_404 = client.get("/api/documentos/doc-web-1/audio")
+    assert resp_audio_404.status_code == 404
+    assert str(tmp_path) not in resp_audio_404.json()["detail"]
+
+
+def test_fronteira_hexagonal_adaptador_web() -> None:
+    import ast
+
+    from anotai.adapters.inbound.web.app import DIRETORIO_WEB
+
+    prefixos_proibidos = (
+        "anotai.adapters.outbound",
+        "anotai.adapters.inbound.cli",
+        "pymupdf",
+        "fitz",
+        "ollama",
+    )
+    for arquivo_py in sorted(DIRETORIO_WEB.glob("*.py")):
+        arvore = ast.parse(arquivo_py.read_text(encoding="utf-8"), filename=str(arquivo_py))
+        for no in ast.walk(arvore):
+            if isinstance(no, ast.Import):
+                for alias in no.names:
+                    assert not alias.name.startswith(prefixos_proibidos), (
+                        f"Violação hexagonal em {arquivo_py.name}: import {alias.name}"
+                    )
+            elif isinstance(no, ast.ImportFrom) and no.module:
+                assert not no.module.startswith(prefixos_proibidos), (
+                    f"Violação hexagonal em {arquivo_py.name}: from {no.module}"
+                )
+
+
+def test_vinculo_serializa_metricas_estruturadas_e_remocao_parcial(tmp_path: Path) -> None:
+    cfg = _settings_isoladas(tmp_path)
+    banco = Path(cfg.database_path)
+    pdf_path = tmp_path / "aula.pdf"
+    audio_path = tmp_path / "aula.wav"
+    pdf_path.write_bytes(b"%PDF-1.4")
+    audio_path.write_bytes(b"RIFF")
+
+    doc = _documento_ficticio(pdf_path)
+    aula = _aula_ficticia(audio_path)
+
+    RepositorioDocumentoSQLite(banco).salvar(doc)
+    RepositorioAulaSQLite(banco).salvar(aula)
+
+    alin = Alinhamento(
+        id_alinhamento=Alinhamento.gerar_id_estavel("int-1", doc.id_documento, "hierarchical_hmm"),
+        id_aula=aula.id_aula,
+        id_documento=doc.id_documento,
+        id_intervalo="int-1",
+        ids_paginas=["doc-web-1-p1", "doc-web-1-p2"],
+        ids_unidades=["doc-web-1-p1-u1", "doc-web-1-p2-u1"],
+        status="aligned",
+        tipo_relacao="direct",
+        confianca=0.81,
+        estrategia="hierarchical_hmm",
+        justificativa=(
+            "estrategia=hierarchical_hmm | "
+            "pag_topo=doc-web-1-p1(final=0.8100, sim=0.7500, temp=0.9000, vis=0.1000) | "
+            "gamma_abs=0.0500"
+        ),
+        origem="automatic",
+    )
+    RepositorioAlinhamentoSQLite(banco).salvar_lote([alin])
+
+    app = criar_app(settings=cfg)
+    client = ClienteTesteASGI(app)
+
+    grafo = client.get("/api/documentos/doc-web-1").json()
+    vinculo = grafo["intervalos"][0]["vinculo"]
+    assert vinculo["metricas"] == [
+        {"rotulo": "Conf.", "valor": "81%"},
+        {"rotulo": "Princ.", "valor": "Pág. 1"},
+        {"rotulo": "Texto", "valor": "75%"},
+        {"rotulo": "Temp.", "valor": "90%"},
+        {"rotulo": "Visual", "valor": "10%"},
+        {"rotulo": "Abst.", "valor": "5%"},
+    ]
+
+    resp_del_pag = client.delete(f"/api/vinculos/{alin.id_alinhamento}?id_pagina=doc-web-1-p1")
+    assert resp_del_pag.status_code == 200
+    atualizado = resp_del_pag.json()
+    assert atualizado["ids_paginas"] == ["doc-web-1-p2"]
+    assert atualizado["ids_unidades"] == ["doc-web-1-p2-u1"]
+    assert atualizado["manual"] is True
+    assert atualizado["metricas"] is None
+
+

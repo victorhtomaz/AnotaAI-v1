@@ -14,12 +14,14 @@ from .normalizacao import (
     normalizar_conteudo_extraido,
     normalizar_texto,
 )
+from .renderizador_pdf import RenderizadorPDFPyMuPDF
 from .unidades import segmentar_unidades_pagina
 
 __all__ = [
     "ExtratorPDF",
     "ImagemBrutaPdf",
     "RenderPaginaPdf",
+    "RenderizadorPDFPyMuPDF",
     "calcular_piso_drawings",
     "contar_caracteres_uteis",
     "converter_xref_para_png_rgb",
