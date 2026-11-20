@@ -580,8 +580,12 @@ select:focus-visible {
 .campo-fieldset {
     border: none;
     padding: 0;
-    margin: 0;
+    margin: 0 0 var(--s-4);
     min-width: 0;
+}
+
+.campo-fieldset:last-child {
+    margin-bottom: 0;
 }
 
 /* Labels: 13px at weight 500/600, sentence case (system.md) */

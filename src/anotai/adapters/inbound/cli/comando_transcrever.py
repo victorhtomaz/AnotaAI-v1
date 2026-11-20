@@ -12,13 +12,25 @@ from anotai.bootstrap import (
     obter_classes_repositorios,
 )
 from anotai.config import Settings
-from anotai.domain.exceptions import ErroAudio, ErroIntegridade
+from anotai.domain.exceptions import ErroAudio, ErroIntegridade, ErroTranscricao
 
 
 def configurar_parser_transcrever(subparsers: argparse._SubParsersAction) -> None:
     parser = subparsers.add_parser("transcrever", help="Transcreve uma aula em áudio/vídeo.")
     parser.add_argument("audio", type=Path, help="Caminho do áudio ou vídeo da aula.")
     parser.add_argument("--title", type=str, default=None, help="Título identificador da aula.")
+    parser.add_argument(
+        "--provider",
+        choices=("whisperx", "azure_speech"),
+        default=None,
+        help="Provedor de transcrição (sobrescreve ANOTAI_PROVEDOR_TRANSCRICAO).",
+    )
+    parser.add_argument(
+        "--language",
+        type=str,
+        default=None,
+        help="Idioma da fala para provedor em nuvem (ex.: pt-BR).",
+    )
     parser.add_argument("--model", type=str, default=None, help="Modelo WhisperX.")
     parser.add_argument("--device", type=str, default=None, help="Dispositivo (cpu/cuda).")
     parser.add_argument(
@@ -58,13 +70,6 @@ def executar_comando_transcrever(
     tipo_computacao = args.compute_type or settings.whisperx_compute_type
     alinhar = args.align_phonemes or settings.whisperx_align_phonemes
 
-    provedor = criar_provedor_transcricao(
-        modelo=modelo,
-        dispositivo=dispositivo,
-        tipo_computacao=tipo_computacao,
-        alinhar_fonemas=alinhar,
-    )
-
     _, padrao_aula_cls, _ = obter_classes_repositorios()
     repo_aula_cls = repo_cls or padrao_aula_cls
     repositorio = repo_aula_cls(Path(settings.database_path))
@@ -75,17 +80,25 @@ def executar_comando_transcrever(
     )
     diretorio_bruto = Path(settings.raw_transcripts_directory)
 
-    caso_uso = transcrever_cls(
-        inspetor=inspetor,
-        provedor=provedor,
-        repositorio=repositorio,
-        agrupador=agrupador,
-        diretorio_bruto=diretorio_bruto,
-    )
-
     try:
+        provedor = criar_provedor_transcricao(
+            modelo=modelo,
+            dispositivo=dispositivo,
+            tipo_computacao=tipo_computacao,
+            alinhar_fonemas=alinhar,
+            settings=settings,
+            provedor=getattr(args, "provider", None),
+            idioma=getattr(args, "language", None),
+        )
+        caso_uso = transcrever_cls(
+            inspetor=inspetor,
+            provedor=provedor,
+            repositorio=repositorio,
+            agrupador=agrupador,
+            diretorio_bruto=diretorio_bruto,
+        )
         aula = caso_uso.executar(args.audio, titulo=args.title)
-    except (ErroAudio, ErroIntegridade) as exc:
+    except (ErroAudio, ErroTranscricao, ErroIntegridade) as exc:
         print(f"Erro na transcrição de áudio: {exc}", file=sys.stderr)
         return 1
 

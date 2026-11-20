@@ -216,6 +216,7 @@ def executar_comando_alinhar(
                 temperatura=settings.visual_temperature,
                 seed=settings.visual_seed,
                 pensar=settings.visual_think,
+                provedor=settings.visual_provider,
             )
             caso_doc = ImportarDocumento(
                 criar_extrator_documento(analisador), repositorio=repo_doc
@@ -236,6 +237,8 @@ def executar_comando_alinhar(
                 dispositivo=settings.whisperx_device,
                 tipo_computacao=settings.whisperx_compute_type,
                 alinhar_fonemas=settings.whisperx_align_phonemes,
+                settings=settings,
+                provedor=settings.transcription_provider,
             )
             agrupador = AgrupadorIntervalos(
                 limiar_silencio=settings.interval_silence_threshold,

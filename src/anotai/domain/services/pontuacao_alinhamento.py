@@ -49,12 +49,14 @@ def combinar_pontuacao_pagina(pontuacao_direta: float, pontuacao_unidades: float
 
 
 def calcular_evidencia_visual_pagina(candidato_pagina: CandidatoPagina) -> float:
+    from anotai.domain.entities.documento import UnidadeDocumento
     from anotai.domain.value_objects.evidencia_recuperacao import TIPOS_UNIDADES_VISUAIS
 
     pontuacoes_visuais = [
         u.pontuacao
         for u in candidato_pagina.unidades_evidencia
-        if u.tipo_unidade in TIPOS_UNIDADES_VISUAIS or u.fonte == "ollama"
+        if u.tipo_unidade in TIPOS_UNIDADES_VISUAIS
+        or u.fonte in UnidadeDocumento.FONTES_OCR_VISUAL
     ]
     return round(min(1.0, max(pontuacoes_visuais, default=0.0)), 4)
 

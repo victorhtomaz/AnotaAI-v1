@@ -37,10 +37,13 @@ class OpcoesPadraoResponse(BaseModel):
     executar_transcricao: bool
     executar_alinhamento: bool
     metodo_pdf: str
+    provedor_visual: str
     modelo_visual: str
     temperatura_visual: float
     seed_visual: int
     pensar_visual: bool
+    provedor_transcricao: str
+    idioma_transcricao: str
     modelo_whisperx: str
     dispositivo_whisperx: str
     tipo_computacao: str

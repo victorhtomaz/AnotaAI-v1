@@ -19,6 +19,14 @@ dependencies = [
     "whisperx>=3.8.6",
 ]
 
+[project.optional-dependencies]
+azure = [
+    "azure-cognitiveservices-speech>=1.40.0",
+]
+google = [
+    "google-genai>=1.0.0",
+]
+
 [project.scripts]
 anotai = "anotai.adapters.inbound.cli.principal:main"
 

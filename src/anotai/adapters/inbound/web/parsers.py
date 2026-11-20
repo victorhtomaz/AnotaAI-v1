@@ -67,6 +67,24 @@ def extrair_opcoes(form: FormData, settings: Settings) -> OpcoesProcessamento:
     if metodo_pdf not in ("native_then_ocr", "native"):
         raise ValueError(f"Método de extração de PDF inválido: '{metodo_pdf}'.")
 
+    provedor_visual = (
+        _texto(form, "provedor_visual", padrao.provedor_visual) or padrao.provedor_visual
+    ).lower()
+    if provedor_visual not in ("ollama", "google_ai_studio"):
+        raise ValueError(f"Provedor de análise visual inválido: '{provedor_visual}'.")
+
+    provedor_transcricao = (
+        _texto(form, "provedor_transcricao", padrao.provedor_transcricao)
+        or padrao.provedor_transcricao
+    ).lower()
+    if provedor_transcricao not in ("whisperx", "azure_speech"):
+        raise ValueError(f"Provedor de transcrição inválido: '{provedor_transcricao}'.")
+
+    idioma_transcricao = (
+        _texto(form, "idioma_transcricao", padrao.idioma_transcricao)
+        or padrao.idioma_transcricao
+    )
+
     duracao_min = _decimal(form, "duracao_minima_intervalo", padrao.duracao_minima_intervalo, 1.0)
     duracao_max = _decimal(form, "duracao_maxima_intervalo", padrao.duracao_maxima_intervalo, 1.0)
     if duracao_max < duracao_min:
@@ -81,6 +99,7 @@ def extrair_opcoes(form: FormData, settings: Settings) -> OpcoesProcessamento:
         id_documento_existente=_texto(form, "id_documento_existente") or None,
         id_aula_existente=_texto(form, "id_aula_existente") or None,
         metodo_pdf=metodo_pdf,
+        provedor_visual=provedor_visual,
         modelo_visual=_texto(form, "modelo_visual", padrao.modelo_visual) or padrao.modelo_visual,
         temperatura_visual=_decimal(
             form, "temperatura_visual", padrao.temperatura_visual, 0.0, 2.0
@@ -88,6 +107,8 @@ def extrair_opcoes(form: FormData, settings: Settings) -> OpcoesProcessamento:
         seed_visual=_inteiro(form, "seed_visual", padrao.seed_visual, 0),
         pensar_visual=_flag(form, "pensar_visual"),
         titulo_aula=_texto(form, "titulo_aula") or None,
+        provedor_transcricao=provedor_transcricao,
+        idioma_transcricao=idioma_transcricao,
         modelo_whisperx=(
             _texto(form, "modelo_whisperx", padrao.modelo_whisperx) or padrao.modelo_whisperx
         ),

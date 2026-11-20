@@ -17,6 +17,7 @@ from anotai.application.ports import (
     RepositorioDocumento,
 )
 from anotai.config import Settings
+from anotai.domain.exceptions import ErroAnaliseVisual, ErroTranscricao
 
 
 def obter_classes_repositorios() -> tuple[type, type, type]:
@@ -53,8 +54,65 @@ def criar_analisador_visual(
     seed: int,
     pensar: bool,
     analisador_cls: Any = None,
+    provedor: str | None = None,
 ) -> Any:
-    """Instancia o analisador visual (Ollama por padrão) com cliente configurado."""
+    """Instancia o analisador visual (Ollama por padrão ou Google AI Studio) configurado."""
+    provedor_efetivo = (
+        (provedor or getattr(settings, "visual_provider", "ollama") or "ollama")
+        .strip()
+        .lower()
+    )
+
+    if provedor_efetivo == "google_ai_studio":
+        chave = getattr(settings, "google_api_key", "").strip()
+        if not chave:
+            raise ErroAnaliseVisual(
+                "Chave do Google AI Studio não configurada: defina "
+                "ANOTAI_GOOGLE_API_KEY (ou GEMINI_API_KEY)."
+            )
+
+        modelo_google = (
+            getattr(settings, "google_visual_model", "gemma-4-31b-it").strip()
+            or "gemma-4-31b-it"
+        )
+
+        classe = analisador_cls
+        if classe is None:
+            try:
+                import google.genai  # noqa: F401
+            except ImportError as exc:
+                raise ErroAnaliseVisual(
+                    "SDK do Google GenAI não instalado. Execute: uv sync --extra google"
+                ) from exc
+
+            from anotai.adapters.outbound.google import AnalisadorVisualGoogleAIStudio
+
+            classe = AnalisadorVisualGoogleAIStudio
+
+        return classe(
+            chave=chave,
+            modelo=modelo_google,
+            temperatura=temperatura,
+            modelos_fallback=tuple(
+                getattr(
+                    settings,
+                    "google_visual_fallback_models",
+                    ("gemma-4-26b-a4b-it", "gemini-2.5-flash-lite"),
+                )
+            ),
+            max_tentativas=int(getattr(settings, "google_max_retries", 3)),
+            backoff_inicial_segundos=float(
+                getattr(settings, "google_backoff_initial_seconds", 2.0)
+            ),
+            intervalo_entre_requisicoes_segundos=float(
+                getattr(settings, "google_request_interval_seconds", 0.5)
+            ),
+            max_concorrencia=int(getattr(settings, "google_max_concurrency", 2)),
+        )
+
+    if provedor_efetivo != "ollama":
+        raise ErroAnaliseVisual(f"Provedor de análise visual não suportado: '{provedor_efetivo}'")
+
     from ollama import Client
 
     classe = analisador_cls
@@ -100,8 +158,66 @@ def criar_provedor_transcricao(
     tipo_computacao: str,
     alinhar_fonemas: bool,
     provedor_cls: Any = None,
+    settings: Settings | None = None,
+    provedor: str | None = None,
+    idioma: str | None = None,
 ) -> Any:
-    """Instancia o provedor de transcrição automática (ASR)."""
+    """Instancia o provedor de transcrição automática (WhisperX por padrão ou Azure Speech)."""
+    provedor_efetivo = (
+        (
+            provedor
+            or (getattr(settings, "transcription_provider", "whisperx") if settings else "whisperx")
+            or "whisperx"
+        )
+        .strip()
+        .lower()
+    )
+
+    if provedor_efetivo == "azure_speech":
+        chave = getattr(settings, "azure_speech_key", "").strip() if settings else ""
+        regiao = getattr(settings, "azure_speech_region", "").strip() if settings else ""
+        endpoint = getattr(settings, "azure_speech_endpoint", "").strip() if settings else ""
+        if not chave or not (regiao or endpoint):
+            raise ErroTranscricao(
+                "Credenciais do Azure Speech não configuradas: defina "
+                "ANOTAI_AZURE_SPEECH_KEY e ANOTAI_AZURE_SPEECH_REGION (ou ENDPOINT)."
+            )
+
+        idioma_efetivo = (
+            idioma
+            or (getattr(settings, "azure_speech_language", "pt-BR") if settings else "pt-BR")
+            or "pt-BR"
+        )
+        timestamps_palavras = (
+            bool(getattr(settings, "azure_speech_word_timestamps", True))
+            if settings
+            else True
+        )
+
+        classe = provedor_cls
+        if classe is None:
+            try:
+                import azure.cognitiveservices.speech  # noqa: F401
+            except ImportError as exc:
+                raise ErroTranscricao(
+                    "SDK do Azure Speech não instalado. Execute: uv sync --extra azure"
+                ) from exc
+
+            from anotai.adapters.outbound.azure import ProvedorAzureSpeech
+
+            classe = ProvedorAzureSpeech
+
+        return classe(
+            chave=chave,
+            regiao=regiao,
+            idioma=idioma_efetivo,
+            endpoint=endpoint,
+            timestamps_palavras=timestamps_palavras,
+        )
+
+    if provedor_efetivo != "whisperx":
+        raise ErroTranscricao(f"Provedor de transcrição não suportado: '{provedor_efetivo}'")
+
     classe = provedor_cls
     if classe is None:
         from anotai.adapters.outbound.audio import ProvedorWhisperX

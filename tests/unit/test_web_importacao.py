@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import anyio
 import anyio.to_thread
 import httpx
+import sniffio
 
 from anotai.adapters.inbound.cli.comando_web import executar_comando_web
 from anotai.adapters.inbound.cli.principal import criar_parser
@@ -68,16 +69,20 @@ async def _run_sync_inline(func: Any, *args: Any, **kwargs: Any) -> Any:
 
 def _executar_corrotina_sem_loop(coro: Any) -> Any:
     """Executa uma corrotina ASGI pura sem criar event loop com socketpair."""
-    with (
-        patch.object(anyio.to_thread, "run_sync", _run_sync_inline),
-        patch.object(anyio, "open_file", _open_file_inline),
-        patch.object(anyio, "CancelScope", _CancelScopeNoop),
-    ):
-        try:
-            while True:
-                coro.send(None)
-        except StopIteration as stop:
-            return stop.value
+    token = sniffio.current_async_library_cvar.set("asyncio")
+    try:
+        with (
+            patch.object(anyio.to_thread, "run_sync", _run_sync_inline),
+            patch.object(anyio, "open_file", _open_file_inline),
+            patch.object(anyio, "CancelScope", _CancelScopeNoop),
+        ):
+            try:
+                while True:
+                    coro.send(None)
+            except StopIteration as stop:
+                return stop.value
+    finally:
+        sniffio.current_async_library_cvar.reset(token)
 
 
 class _WrapperASGISpec24:
@@ -291,7 +296,10 @@ def test_spa_index_assets_locais_e_opcoes_padrao(tmp_path: Path) -> None:
     assert resp_opcoes.status_code == 200
     dados_opcoes = resp_opcoes.json()
     assert dados_opcoes["modelo_visual"] == cfg.visual_model
+    assert dados_opcoes["provedor_visual"] == "ollama"
     assert dados_opcoes["modelo_whisperx"] == cfg.whisperx_model
+    assert dados_opcoes["provedor_transcricao"] == "whisperx"
+    assert dados_opcoes["idioma_transcricao"] == "pt-BR"
     assert dados_opcoes["metodo_pdf"] == "native_then_ocr"
     assert dados_opcoes["estrategia_base"] == "hybrid"
     assert dados_opcoes["modelo_temporal"] == "hmm"
@@ -299,6 +307,11 @@ def test_spa_index_assets_locais_e_opcoes_padrao(tmp_path: Path) -> None:
     assert 'x-show="$store.anotai.opcoes.executar_pdf"' in html
     assert 'x-show="$store.anotai.opcoes.executar_transcricao"' in html
     assert 'x-show="$store.anotai.opcoes.executar_alinhamento"' in html
+    assert 'name="provedor_visual"' in html
+    assert 'name="provedor_transcricao"' in html
+    assert "Processamento em nuvem" in html
+    assert "Google AI Studio" not in html
+    assert "Azure Speech" not in html
     assert "$store.anotai.documentosVinculados" in html
     assert "$store.anotai.opcoesAlinhamentoDisponiveis" in html
     assert 'value="hierarchical_hmm"' not in html
@@ -597,13 +610,16 @@ def test_entrega_pdf_e_streaming_audio_com_range_206(tmp_path: Path) -> None:
     assert resp_img.headers["content-type"] == "image/png"
     assert resp_img.content.startswith(b"\x89PNG")
 
-    resp_audio_full = client.get("/api/documentos/doc-web-1/audio")
+    resp_audio_sem_vinculo = client.get("/api/documentos/doc-web-1/audio")
+    assert resp_audio_sem_vinculo.status_code == 404
+
+    resp_audio_full = client.get("/api/documentos/doc-web-1/audio?id_aula=aula-web-1")
     assert resp_audio_full.status_code == 200
     assert resp_audio_full.headers["accept-ranges"] == "bytes"
     assert resp_audio_full.content == audio_bytes
 
     resp_range = client.get(
-        "/api/documentos/doc-web-1/audio",
+        "/api/documentos/doc-web-1/audio?id_aula=aula-web-1",
         headers={"Range": "bytes=2-7"},
     )
     assert resp_range.status_code == 206
@@ -613,7 +629,7 @@ def test_entrega_pdf_e_streaming_audio_com_range_206(tmp_path: Path) -> None:
     assert resp_range.content == b"234567"
 
     resp_invalido = client.get(
-        "/api/documentos/doc-web-1/audio",
+        "/api/documentos/doc-web-1/audio?id_aula=aula-web-1",
         headers={"Range": "bytes=99-120"},
     )
     assert resp_invalido.status_code == 416
@@ -1046,6 +1062,62 @@ def test_vinculo_serializa_metricas_estruturadas_e_remocao_parcial(tmp_path: Pat
     assert atualizado["metricas"] is None
 
 
+def test_pdf_individual_nao_associa_aula_automaticamente(tmp_path: Path) -> None:
+    cfg = _settings_isoladas(tmp_path)
+    banco = Path(cfg.database_path)
+    pdf_path = tmp_path / "avulso.pdf"
+    audio_path = tmp_path / "aula_existente.wav"
+    pdf_path.write_bytes(b"%PDF-1.4")
+    audio_path.write_bytes(b"RIFF")
+
+    doc = _documento_ficticio(pdf_path)
+    aula = _aula_ficticia(audio_path)
+
+    RepositorioAulaSQLite(banco).salvar(aula)
+
+    class FakeImportarDocSolo:
+        def __init__(self, extrator: Any, repositorio: Any = None) -> None:
+            self.repositorio = repositorio
+
+        def executar(self, caminho: Path, metodo: str) -> Documento:
+            if self.repositorio is not None:
+                self.repositorio.salvar(doc)
+            return doc
+
+    gestor = GerenciadorProcessamento(
+        settings=cfg,
+        executar_sincrono=True,
+        importar_doc_cls=FakeImportarDocSolo,
+        extrator_pdf_cls=lambda analisador: analisador,
+        analisador_visual_cls=lambda *args, **kwargs: MagicMock(),
+    )
+    app = criar_app(settings=cfg, gerenciador=gestor)
+    client = ClienteTesteASGI(app)
+
+    resp_post = client.post(
+        "/api/documentos",
+        files={"arquivo_pdf": ("avulso.pdf", b"%PDF-1.4 mock", "application/pdf")},
+        data={"executar_pdf": "on", "metodo_pdf": "native"},
+    )
+    assert resp_post.status_code == 202
+
+    lista = client.get("/api/documentos").json()
+    assert len(lista) == 1
+    assert lista[0]["id_documento"] == "doc-web-1"
+    assert lista[0]["id_aula"] is None
+    assert lista[0]["tem_audio"] is False
+
+    grafo = client.get("/api/documentos/doc-web-1").json()
+    assert grafo["id_aula"] is None
+    assert grafo["url_audio"] is None
+    assert grafo["intervalos"] == []
+
+    grafo_explicito = client.get("/api/documentos/doc-web-1?id_aula=aula-web-1").json()
+    assert grafo_explicito["id_aula"] == "aula-web-1"
+    assert grafo_explicito["url_audio"] == "/api/documentos/doc-web-1/audio?id_aula=aula-web-1"
+
+
+
 def test_fronteira_hexagonal_dominio_e_aplicacao() -> None:
     import ast
 
@@ -1135,5 +1207,100 @@ def test_traducoes_unidades_pdf_viewer_e_selecao_vinculo_mais_recente() -> None:
         [auto_antigo, manual, auto_recente]
     )
     assert ativos_com_manual["int-1"].id_alinhamento == "align-manual-1"
+
+
+def test_web_seleciona_provedores_nuvem_e_valida_invalidos(tmp_path: Path) -> None:
+    cfg = _settings_isoladas(tmp_path)
+    cfg = Settings(
+        ollama_url=cfg.ollama_url,
+        processed_directory=cfg.processed_directory,
+        database_path=cfg.database_path,
+        raw_transcripts_directory=cfg.raw_transcripts_directory,
+        google_api_key="google-key",
+        azure_speech_key="speech-key",
+        azure_speech_region="francecentral",
+    )
+    chamadas: dict[str, object] = {}
+
+    class FakeImportarDoc:
+        def __init__(self, extrator: Any, repositorio: Any = None) -> None:
+            self.extrator = extrator
+
+        def executar(self, caminho: Path, metodo: str) -> Documento:
+            doc = _documento_ficticio(caminho)
+            doc.paginas[0].unidades[1].fonte = "google_ai_studio"
+            return doc
+
+    class FakeTranscrever:
+        def __init__(self, inspetor: Any, provedor: Any, **kwargs: Any) -> None:
+            chamadas["speech"] = (provedor.chave, provedor.regiao, provedor.idioma)
+
+        def executar(self, caminho: Path, titulo: str | None = None) -> Aula:
+            return _aula_ficticia(caminho)
+
+    gestor = GerenciadorProcessamento(
+        settings=cfg,
+        executar_sincrono=True,
+        repo_doc_cls=lambda _: MagicMock(),
+        repo_aula_cls=lambda _: MagicMock(),
+        repo_alin_cls=lambda _: MagicMock(),
+        importar_doc_cls=FakeImportarDoc,
+        transcrever_cls=FakeTranscrever,
+        extrator_pdf_cls=lambda analisador: analisador,
+        analisador_visual_cls=lambda *args, **kw: chamadas.setdefault("vision", kw) or MagicMock(),
+        inspetor_audio_cls=lambda: MagicMock(),
+        provedor_whisperx_cls=lambda **kw: SimpleNamespace(**kw),
+    )
+    app = criar_app(settings=cfg, gerenciador=gestor)
+    client = ClienteTesteASGI(app)
+
+    resp_invalido = client.post(
+        "/api/documentos",
+        data={
+            "executar_pdf": "on",
+            "provedor_visual": "invalido",
+        },
+    )
+    assert resp_invalido.status_code == 400
+
+    resp_invalido_asr = client.post(
+        "/api/documentos",
+        data={
+            "executar_transcricao": "on",
+            "provedor_transcricao": "invalido",
+        },
+    )
+    assert resp_invalido_asr.status_code == 400
+
+    resp_ok = client.post(
+        "/api/documentos",
+        files={
+            "arquivo_pdf": ("slides.pdf", b"%PDF-1.4 mock", "application/pdf"),
+            "arquivo_audio": ("aula.wav", b"RIFF mock", "audio/wav"),
+        },
+        data={
+            "executar_pdf": "on",
+            "executar_transcricao": "on",
+            "metodo_pdf": "native_then_ocr",
+            "provedor_visual": "google_ai_studio",
+            "provedor_transcricao": "azure_speech",
+            "idioma_transcricao": "en-US",
+        },
+    )
+    assert resp_ok.status_code == 202
+    job = client.get(f"/api/jobs/{resp_ok.json()['job_id']}").json()
+    assert job["status_geral"] == "concluido"
+    assert job["etapas"]["ocr"]["metricas"]["Unidades visuais"] == "1"
+    assert chamadas["vision"] == {
+        "chave": "google-key",
+        "modelo": "gemma-4-31b-it",
+        "temperatura": 0.0,
+        "modelos_fallback": ("gemma-4-26b-a4b-it", "gemini-2.5-flash-lite"),
+        "max_tentativas": 3,
+        "backoff_inicial_segundos": 2.0,
+        "intervalo_entre_requisicoes_segundos": 0.5,
+        "max_concorrencia": 2,
+    }
+    assert chamadas["speech"] == ("speech-key", "francecentral", "en-US")
 
 

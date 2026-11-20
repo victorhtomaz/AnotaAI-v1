@@ -23,6 +23,12 @@ def configurar_parser_pdf(subparsers: argparse._SubParsersAction) -> None:
         default="native_then_ocr",
         help="Método de extração textual.",
     )
+    parser.add_argument(
+        "--visual-provider",
+        choices=("ollama", "google_ai_studio"),
+        default=None,
+        help="Provedor de análise visual/OCR (sobrescreve ANOTAI_PROVEDOR_VISUAL).",
+    )
 
 
 def executar_comando_pdf(
@@ -32,24 +38,26 @@ def executar_comando_pdf(
     importar_cls: Any = ImportarDocumento,
     extrator_cls: Any = None,
 ) -> int:
-    analisador = None
-    if args.method == "native_then_ocr":
-        analisador = criar_analisador_visual(
-            settings,
-            settings.visual_model,
-            temperatura=settings.visual_temperature,
-            seed=settings.visual_seed,
-            pensar=settings.visual_think,
-        )
-
     padrao_doc_cls, _, _ = obter_classes_repositorios()
     repo_doc_cls = repo_cls or padrao_doc_cls
     banco_path = Path(settings.database_path)
     repositorio = repo_doc_cls(banco_path)
-    extrator = criar_extrator_documento(analisador, extrator_cls=extrator_cls)
-    caso_uso = importar_cls(extrator, repositorio=repositorio)
 
     try:
+        analisador = None
+        if args.method == "native_then_ocr":
+            visual_provider = getattr(args, "visual_provider", None)
+            analisador = criar_analisador_visual(
+                settings,
+                settings.visual_model,
+                temperatura=settings.visual_temperature,
+                seed=settings.visual_seed,
+                pensar=settings.visual_think,
+                provedor=visual_provider,
+            )
+
+        extrator = criar_extrator_documento(analisador, extrator_cls=extrator_cls)
+        caso_uso = importar_cls(extrator, repositorio=repositorio)
         documento = caso_uso.executar(args.pdf, args.method)
     except (ErroProcessamentoDocumento, ErroIntegridade) as exc:
         print(f"Erro ao processar PDF: {exc}", file=sys.stderr)

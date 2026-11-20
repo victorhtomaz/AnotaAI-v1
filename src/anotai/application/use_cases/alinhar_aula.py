@@ -2,7 +2,13 @@ from collections.abc import Sequence
 
 from anotai.application.ports.repositorio_alinhamento import RepositorioAlinhamento
 from anotai.application.use_cases.recuperar_candidatos import RecuperarCandidatos
-from anotai.domain.entities import Alinhamento, Aula, Documento, ValidadorIntegridade
+from anotai.domain.entities import (
+    Alinhamento,
+    Aula,
+    Documento,
+    UnidadeDocumento,
+    ValidadorIntegridade,
+)
 from anotai.domain.value_objects import (
     CandidatoPagina,
     CandidatoUnidade,
@@ -608,7 +614,8 @@ class AlinharAula:
             s_sim_u = cu.pontuacao
             s_pag = mapa_score_pag_sel.get(cu.id_pagina, 0.0)
             eh_visual = (
-                cu.tipo_unidade in TIPOS_UNIDADES_VISUAIS or cu.fonte == "ollama"
+                cu.tipo_unidade in TIPOS_UNIDADES_VISUAIS
+                or cu.fonte in UnidadeDocumento.FONTES_OCR_VISUAL
             )
             s_vis_u = s_sim_u if eh_visual else 0.0
 

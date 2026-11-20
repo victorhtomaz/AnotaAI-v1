@@ -61,9 +61,6 @@ class ConsultarAcervo:
             if aula_mem is not None:
                 return aula_mem, []
 
-        if len(aulas) == 1:
-            return aulas[0], []
-
         return None, []
 
     @staticmethod

@@ -361,3 +361,54 @@ def test_cli_atalho_dois_arquivos_aciona_alinhar() -> None:
         assert args_chamados.subcomando == "alinhar"
         assert args_chamados.id_aula == "aula.wav"
         assert args_chamados.id_documento == "slides.pdf"
+
+
+def test_cli_opcoes_nuvem_pdf_e_transcrever(tmp_path: Path, capsys) -> None:
+    pdf_path = tmp_path / "slides.pdf"
+    pdf_path.touch()
+    audio_path = tmp_path / "aula.wav"
+    audio_path.touch()
+
+    from anotai.config import Settings
+
+    settings_sem_chaves = Settings(database_path=str(tmp_path / "banco.sqlite"))
+    with patch(
+        "anotai.adapters.inbound.cli.principal.Settings.from_environment",
+        return_value=settings_sem_chaves,
+    ):
+        cod_pdf = main(["pdf", str(pdf_path), "--visual-provider", "google_ai_studio"])
+        assert cod_pdf == 1
+        assert "ANOTAI_GOOGLE_API_KEY" in capsys.readouterr().err
+
+        cod_asr = main(
+            ["transcrever", str(audio_path), "--provider", "azure_speech", "--language", "en-US"]
+        )
+        assert cod_asr == 1
+        assert "ANOTAI_AZURE_SPEECH" in capsys.readouterr().err
+
+
+def test_bootstrap_rejeita_provedores_desconhecidos_ou_sem_credenciais() -> None:
+    from anotai.bootstrap import criar_analisador_visual, criar_provedor_transcricao
+    from anotai.config import Settings
+    from anotai.domain.exceptions import ErroAnaliseVisual, ErroTranscricao
+
+    cfg = Settings()
+    with pytest.raises(ErroAnaliseVisual, match="não suportado"):
+        criar_analisador_visual(
+            cfg,
+            cfg.visual_model,
+            temperatura=0.0,
+            seed=42,
+            pensar=False,
+            provedor="desconhecido",
+        )
+
+    with pytest.raises(ErroTranscricao, match="não suportado"):
+        criar_provedor_transcricao(
+            modelo="base",
+            dispositivo="cpu",
+            tipo_computacao="int8",
+            alinhar_fonemas=False,
+            settings=cfg,
+            provedor="desconhecido",
+        )

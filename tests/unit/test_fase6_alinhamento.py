@@ -305,6 +305,29 @@ def test_evidencia_visual_pagina() -> None:
     )
     assert calcular_evidencia_visual_pagina(cp) == 0.75
 
+    u_google = CandidatoUnidade(
+        id_unidade="u3",
+        id_pagina="p1",
+        numero_pagina=1,
+        tipo_unidade="block",
+        ordem_leitura=3,
+        texto="Conteúdo Google AI Studio",
+        pontuacao=0.82,
+        estrategia="bm25",
+        fonte="google_ai_studio",
+    )
+    cp_google = CandidatoPagina(
+        id_pagina="p1",
+        numero_pagina=1,
+        texto="Texto",
+        pontuacao=0.8,
+        pontuacao_direta=0.8,
+        pontuacao_unidades=0.8,
+        estrategia="bm25",
+        unidades_evidencia=(u_texto, u_google),
+    )
+    assert calcular_evidencia_visual_pagina(cp_google) == 0.82
+
 
 def test_hmm_forward_backward_estocasticidade_e_suavizacao() -> None:
     paginas_ordenadas = [("p1", 1), ("p2", 2), ("p3", 3)]

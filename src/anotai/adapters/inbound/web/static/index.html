@@ -254,6 +254,24 @@
                                     </label>
                                 </div>
                             </fieldset>
+
+                            <div
+                                class="grade-campos"
+                                x-show="$store.anotai.opcoes.metodo_pdf === 'native_then_ocr'"
+                            >
+                                <div class="campo-grupo">
+                                    <label for="provedor_visual" class="campo-rotulo">Serviço de análise visual</label>
+                                    <select
+                                        id="provedor_visual"
+                                        name="provedor_visual"
+                                        x-model="$store.anotai.opcoes.provedor_visual"
+                                    >
+                                        <option value="ollama">Processamento local</option>
+                                        <option value="google_ai_studio">Processamento em nuvem</option>
+                                    </select>
+                                    <span class="campo-ajuda">Analisa figuras, gráficos, fórmulas e slides digitalizados.</span>
+                                </div>
+                            </div>
                         </section>
 
                         <section
@@ -321,7 +339,7 @@
                                 </div>
                             </div>
 
-                            <div class="grade-campos grade-2">
+                            <div class="grade-campos grade-3">
                                 <div class="campo-grupo">
                                     <label for="titulo_aula" class="campo-rotulo">Título da aula</label>
                                     <input
@@ -334,6 +352,20 @@
                                     >
                                 </div>
                                 <div class="campo-grupo">
+                                    <label for="provedor_transcricao" class="campo-rotulo">Serviço de transcrição</label>
+                                    <select
+                                        id="provedor_transcricao"
+                                        name="provedor_transcricao"
+                                        x-model="$store.anotai.opcoes.provedor_transcricao"
+                                    >
+                                        <option value="whisperx">Processamento local</option>
+                                        <option value="azure_speech">Processamento em nuvem</option>
+                                    </select>
+                                </div>
+                                <div
+                                    class="campo-grupo"
+                                    x-show="$store.anotai.opcoes.provedor_transcricao === 'whisperx'"
+                                >
                                     <label for="dispositivo_whisperx" class="campo-rotulo">Dispositivo</label>
                                     <select
                                         id="dispositivo_whisperx"
@@ -343,6 +375,21 @@
                                         <option value="cuda">Placa de vídeo (GPU CUDA)</option>
                                         <option value="cpu">CPU</option>
                                         <option value="auto">Automático</option>
+                                    </select>
+                                </div>
+                                <div
+                                    class="campo-grupo"
+                                    x-show="$store.anotai.opcoes.provedor_transcricao === 'azure_speech'"
+                                >
+                                    <label for="idioma_transcricao" class="campo-rotulo">Idioma da fala</label>
+                                    <select
+                                        id="idioma_transcricao"
+                                        name="idioma_transcricao"
+                                        x-model="$store.anotai.opcoes.idioma_transcricao"
+                                    >
+                                        <option value="pt-BR">Português (Brasil)</option>
+                                        <option value="en-US">Inglês (EUA)</option>
+                                        <option value="es-ES">Espanhol</option>
                                     </select>
                                 </div>
                             </div>

@@ -148,6 +148,15 @@ class ExtratorPDF:
                 configuracao={
                     "ocr_escopo": "elementos_visuais",
                     "tipo_material": tipo_material,
+                    **(
+                        {"provedor_visual": provedor_visual}
+                        if (
+                            provedor_visual := getattr(
+                                self._analisador_visual, "provedor", None
+                            )
+                        )
+                        else {}
+                    ),
                 },
                 prompt=getattr(self._analisador_visual, "prompt", None),
                 executado_em=datetime.now(UTC).isoformat(),
@@ -230,7 +239,7 @@ class ExtratorPDF:
                     primeira_pag = paginas_com_visuais[0].numero_pagina
                     raise DocumentoInvalido(
                         f"OCR visual necessário para elementos da página {primeira_pag}, "
-                        "mas Ollama não está configurado"
+                        "mas nenhum analisador visual está configurado"
                     )
                 validar = getattr(self._analisador_visual, "validar_modelo_visual", None)
                 if callable(validar):
@@ -274,7 +283,9 @@ class ExtratorPDF:
                 textos_ocr = [
                     unidade.texto
                     for unidade in unidades
-                    if unidade.fonte == "ollama" and not unidade.eh_decorativa and unidade.texto
+                    if unidade.fonte in UnidadeDocumento.FONTES_OCR_VISUAL
+                    and not unidade.eh_decorativa
+                    and unidade.texto
                 ]
                 if textos_ocr:
                     if pag_bruta.eh_render_pagina_inteira:
@@ -329,6 +340,7 @@ class ExtratorPDF:
             (unidade.tipo, unidade.texto, self._chave_caixa(unidade.caixa)) for unidade in unidades
         }
         ordem = len(unidades)
+        fonte_visual = self._resolver_fonte_visual()
         for unidade_bruta in unidades_brutas:
             texto_bruto = unidade_bruta.get("text")
             texto = self._normalizar(str(texto_bruto)) if texto_bruto is not None else ""
@@ -351,7 +363,7 @@ class ExtratorPDF:
                     texto=texto,
                     ordem_leitura=ordem,
                     caixa=caixa,
-                    fonte="ollama",
+                    fonte=fonte_visual,
                     ids_evidencias=[evidencia] if evidencia else [],
                     eh_decorativa=eh_decorativa,
                 )
@@ -392,6 +404,12 @@ class ExtratorPDF:
     @staticmethod
     def _chave_caixa(caixa: CaixaDelimitadora | None) -> tuple[float, ...] | None:
         return (caixa.x0, caixa.y0, caixa.x1, caixa.y1) if caixa is not None else None
+
+    def _resolver_fonte_visual(self) -> str:
+        fonte = getattr(self._analisador_visual, "fonte_unidade", "ollama")
+        if fonte in UnidadeDocumento.FONTES_OCR_VISUAL:
+            return str(fonte)
+        return "ollama"
 
 
 __all__ = [

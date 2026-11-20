@@ -29,7 +29,7 @@ from anotai.bootstrap import (
     obter_classes_repositorios,
 )
 from anotai.config import Settings
-from anotai.domain.entities import Alinhamento, Aula, Documento
+from anotai.domain.entities import Alinhamento, Aula, Documento, UnidadeDocumento
 from anotai.domain.value_objects import ParametrosHMM, PesosAlinhamento, StatusAlinhamento
 
 logger = logging.getLogger(__name__)
@@ -49,6 +49,7 @@ class OpcoesProcessamento:
 
     # PDF e OCR visual
     metodo_pdf: str = "native_then_ocr"
+    provedor_visual: str = "ollama"
     modelo_visual: str = "qwen3-vl:8b"
     temperatura_visual: float = 0.0
     seed_visual: int = 42
@@ -56,6 +57,8 @@ class OpcoesProcessamento:
 
     # Áudio, ASR e segmentação
     titulo_aula: str | None = None
+    provedor_transcricao: str = "whisperx"
+    idioma_transcricao: str = "pt-BR"
     modelo_whisperx: str = "large-v3"
     dispositivo_whisperx: str = "cuda"
     tipo_computacao: str = "float16"
@@ -82,10 +85,13 @@ class OpcoesProcessamento:
     @classmethod
     def a_partir_de_settings(cls, settings: Settings) -> OpcoesProcessamento:
         return cls(
+            provedor_visual=settings.visual_provider,
             modelo_visual=settings.visual_model,
             temperatura_visual=settings.visual_temperature,
             seed_visual=settings.visual_seed,
             pensar_visual=settings.visual_think,
+            provedor_transcricao=settings.transcription_provider,
+            idioma_transcricao=settings.azure_speech_language,
             modelo_whisperx=settings.whisperx_model,
             dispositivo_whisperx=settings.whisperx_device,
             tipo_computacao=settings.whisperx_compute_type,
@@ -435,7 +441,7 @@ class GerenciadorProcessamento:
                     t.id_documento = documento.id_documento
                 if aula is not None:
                     t.id_aula = aula.id_aula
-                if documento is not None and aula is not None:
+                if documento is not None and aula is not None and opcoes.executar_alinhamento:
                     self._vinculos_doc_aula[documento.id_documento] = aula.id_aula
 
             self._atualizar(id_job, _concluir)
@@ -533,6 +539,7 @@ class GerenciadorProcessamento:
                     seed=opcoes.seed_visual,
                     pensar=opcoes.pensar_visual,
                     analisador_cls=self._analisador_visual_cls,
+                    provedor=opcoes.provedor_visual,
                 )
 
             extrator = criar_extrator_documento(
@@ -551,7 +558,10 @@ class GerenciadorProcessamento:
             total_unidades = sum(len(p.unidades) for p in documento.paginas)
             paginas_ocr = sum(1 for p in documento.paginas if p.metodo_extracao == "mixed")
             unidades_ocr = sum(
-                1 for p in documento.paginas for u in p.unidades if u.fonte == "ollama"
+                1
+                for p in documento.paginas
+                for u in p.unidades
+                if u.fonte in UnidadeDocumento.FONTES_OCR_VISUAL
             )
 
             def _finalizar_pdf(t: TarefaProcessamento) -> None:
@@ -632,6 +642,9 @@ class GerenciadorProcessamento:
                 tipo_computacao=opcoes.tipo_computacao,
                 alinhar_fonemas=opcoes.alinhar_fonemas,
                 provedor_cls=self._provedor_whisperx_cls,
+                settings=self.settings,
+                provedor=opcoes.provedor_transcricao,
+                idioma=opcoes.idioma_transcricao,
             )
             agrupador = self._agrupador_cls(
                 limiar_silencio=opcoes.limiar_silencio,

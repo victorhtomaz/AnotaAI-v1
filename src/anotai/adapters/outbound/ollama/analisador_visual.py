@@ -169,10 +169,21 @@ class AnalisadorVisualOllama:
                 exc,
             )
             return []
-        tipo_imagem = self._normalizar_classificacao_imagem(dados.get("tipo", "conteudo"))
+        return self.normalizar_dados_visuais(dados, numero_pagina)
+
+    @classmethod
+    def normalizar_dados_visuais(
+        cls,
+        dados: dict[str, Any],
+        numero_pagina: int,
+        *,
+        provedor_nome: str = "Ollama",
+    ) -> list[dict[str, Any]]:
+        tipo_imagem = cls._normalizar_classificacao_imagem(dados.get("tipo", "conteudo"))
         if tipo_imagem not in TIPOS_CLASSIFICACAO_IMAGEM:
             logger.warning(
-                "Tipo visual inválido do Ollama na página %s; continuando sem unidades OCR",
+                "Tipo visual inválido do %s na página %s; continuando sem unidades OCR",
+                provedor_nome,
                 numero_pagina,
             )
             return []
@@ -183,13 +194,14 @@ class AnalisadorVisualOllama:
             if isinstance(dados.get(chave), str) and str(dados.get(chave)).strip()
         }
         tem_campos_raiz = bool(campos_raiz)
-        tipo_raiz = self._normalizar_tipo_unidade(dados.get("type")) or "figure"
+        tipo_raiz = cls._normalizar_tipo_unidade(dados.get("type")) or "figure"
         if not isinstance(unidades, list):
             if tem_campos_raiz or any(chave in dados for chave in CHAVES_TEXTO_UNIDADE):
                 unidades = [{"type": tipo_raiz, **campos_raiz}]
             else:
                 logger.warning(
-                    "Resposta do Ollama sem units na página %s; continuando sem unidades OCR",
+                    "Resposta do %s sem units na página %s; continuando sem unidades OCR",
+                    provedor_nome,
                     numero_pagina,
                 )
                 return []
@@ -200,7 +212,7 @@ class AnalisadorVisualOllama:
             if not isinstance(unidade, dict):
                 continue
             tipo_bruto = unidade.get("type") or unidade.get("tipo")
-            tipo_unidade = self._normalizar_tipo_unidade(tipo_bruto)
+            tipo_unidade = cls._normalizar_tipo_unidade(tipo_bruto)
             if tipo_unidade not in UnidadeDocumento.TIPOS_VISUAIS_VALIDOS:
                 logger.warning(
                     "Tipo de unidade visual inválido na página %s: %s",
@@ -216,7 +228,7 @@ class AnalisadorVisualOllama:
                 if len(unidades) == 1 and tem_campos_raiz
                 else unidade
             )
-            texto_extraido = self._extrair_texto_unidade(unidade_enriquecida)
+            texto_extraido = cls._extrair_texto_unidade(unidade_enriquecida)
             resultado.append(
                 {
                     **unidade,

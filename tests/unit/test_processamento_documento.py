@@ -346,3 +346,42 @@ def test_extrair_documento_com_toc(tmp_path: Path) -> None:
     assert resultado.proveniencia.configuracao is not None
     assert resultado.proveniencia.configuracao["tipo_material"] in ("apostila", "slides")
     assert len(resultado.paginas) == 1
+
+
+def test_preserva_fonte_google_ai_studio_e_proveniencia(tmp_path: Path) -> None:
+    class FakeGoogleAnalyzer:
+        modelo = "gemma-4-31b-it"
+        provedor = "google_ai_studio"
+        fonte_unidade = "google_ai_studio"
+        prompt = "prompt"
+
+        def analisar(self, imagem: bytes, numero_pagina: int) -> list[dict[str, object]]:
+            assert imagem
+            assert numero_pagina == 1
+            return [
+                {
+                    "type": "graph",
+                    "text": "Gráfico de convergência da taxa de erro.",
+                    "image_classification": "conteudo",
+                }
+            ]
+
+    path = tmp_path / "google_visual.pdf"
+    imagem = pymupdf.Pixmap(pymupdf.csRGB, (0, 0, 100, 100), False)
+    imagem.clear_with(0x336699)
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_image(pymupdf.Rect(50, 50, 200, 200), pixmap=imagem)
+    document.save(path)
+    document.close()
+
+    resultado = ExtratorPDF(FakeGoogleAnalyzer()).extrair(path)
+    unidades_ocr = [
+        u for u in resultado.paginas[0].unidades if u.fonte == "google_ai_studio"
+    ]
+
+    assert len(unidades_ocr) == 1
+    assert unidades_ocr[0].tipo == "graph"
+    assert "taxa de erro" in resultado.paginas[0].texto_normalizado
+    assert resultado.proveniencia.configuracao is not None
+    assert resultado.proveniencia.configuracao["provedor_visual"] == "google_ai_studio"

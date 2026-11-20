@@ -28,7 +28,8 @@ class UnidadeDocumento:
         "group",
     }
     TIPOS_VISUAIS_VALIDOS = {"figure", "table", "graph", "formula"}
-    FONTES_VALIDAS = {"native", "ollama", "inferred"}
+    FONTES_OCR_VISUAL = {"ollama", "google_ai_studio"}
+    FONTES_VALIDAS = {"native", "inferred", *FONTES_OCR_VISUAL}
 
     def __post_init__(self) -> None:
         if not self.id_unidade:
