@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import Engine, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -9,7 +9,7 @@ from anotai.domain.entities import Anotacao
 from anotai.domain.exceptions import ErroIntegridade
 from anotai.domain.value_objects import IntervaloTempo
 
-from .base import Base, criar_engine_sqlite
+from .base import inicializar_engine_sqlite
 from .modelo_anotacao import (
     ModeloAnotacao,
     ModeloAnotacaoPagina,
@@ -19,10 +19,9 @@ from .modelo_documento import ModeloUnidade
 
 
 class RepositorioAnotacaoSQLite(RepositorioAnotacao):
-    def __init__(self, caminho_banco: Path) -> None:
+    def __init__(self, caminho_banco: Path, engine: Engine | None = None) -> None:
         self.caminho_banco = caminho_banco
-        self._engine = criar_engine_sqlite(caminho_banco)
-        Base.metadata.create_all(self._engine)
+        self._engine = engine if engine is not None else inicializar_engine_sqlite(caminho_banco)
 
     def salvar(self, anotacao: Anotacao) -> None:
         with Session(self._engine) as sessao:

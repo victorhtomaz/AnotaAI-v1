@@ -4,12 +4,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from ollama import Client
-
-from anotai.adapters.outbound.ollama import AnalisadorVisualOllama
-from anotai.adapters.outbound.pdf import ExtratorPDF
-from anotai.adapters.outbound.persistence import RepositorioDocumentoSQLite
 from anotai.application.use_cases import ImportarDocumento
+from anotai.bootstrap import (
+    criar_analisador_visual,
+    criar_extrator_documento,
+    obter_classes_repositorios,
+)
 from anotai.config import Settings
 from anotai.domain.exceptions import ErroIntegridade, ErroProcessamentoDocumento
 
@@ -28,24 +28,26 @@ def configurar_parser_pdf(subparsers: argparse._SubParsersAction) -> None:
 def executar_comando_pdf(
     args: argparse.Namespace,
     settings: Settings,
-    repo_cls: Any = RepositorioDocumentoSQLite,
+    repo_cls: Any = None,
     importar_cls: Any = ImportarDocumento,
-    extrator_cls: Any = ExtratorPDF,
+    extrator_cls: Any = None,
 ) -> int:
     analisador = None
     if args.method == "native_then_ocr":
-        analisador = AnalisadorVisualOllama(
-            Client(host=settings.ollama_url),
+        analisador = criar_analisador_visual(
+            settings,
             settings.visual_model,
             temperatura=settings.visual_temperature,
             seed=settings.visual_seed,
             pensar=settings.visual_think,
-            manter_vivo=settings.ollama_keep_alive,
         )
 
+    padrao_doc_cls, _, _ = obter_classes_repositorios()
+    repo_doc_cls = repo_cls or padrao_doc_cls
     banco_path = Path(settings.database_path)
-    repositorio = repo_cls(banco_path)
-    caso_uso = importar_cls(extrator_cls(analisador), repositorio=repositorio)
+    repositorio = repo_doc_cls(banco_path)
+    extrator = criar_extrator_documento(analisador, extrator_cls=extrator_cls)
+    caso_uso = importar_cls(extrator, repositorio=repositorio)
 
     try:
         documento = caso_uso.executar(args.pdf, args.method)

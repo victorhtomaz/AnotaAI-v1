@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import Engine, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -9,7 +9,7 @@ from anotai.application.ports.repositorio_alinhamento import RepositorioAlinhame
 from anotai.domain.entities import Alinhamento
 from anotai.domain.exceptions import ErroIntegridade
 
-from .base import Base, criar_engine_sqlite
+from .base import inicializar_engine_sqlite
 from .modelo_alinhamento import (
     ModeloAlinhamento,
     ModeloAlinhamentoPagina,
@@ -19,10 +19,9 @@ from .modelo_documento import ModeloUnidade
 
 
 class RepositorioAlinhamentoSQLite(RepositorioAlinhamento):
-    def __init__(self, caminho_banco: Path) -> None:
+    def __init__(self, caminho_banco: Path, engine: Engine | None = None) -> None:
         self.caminho_banco = caminho_banco
-        self._engine = criar_engine_sqlite(caminho_banco)
-        Base.metadata.create_all(self._engine)
+        self._engine = engine if engine is not None else inicializar_engine_sqlite(caminho_banco)
 
     def salvar(self, alinhamento: Alinhamento) -> None:
         with Session(self._engine) as sessao:
@@ -160,6 +159,20 @@ class RepositorioAlinhamentoSQLite(RepositorioAlinhamento):
             stmt = select(ModeloAlinhamento).where(ModeloAlinhamento.aula_id == id_aula)
             if id_documento:
                 stmt = stmt.where(ModeloAlinhamento.documento_id == id_documento)
+            if estrategia:
+                stmt = stmt.where(ModeloAlinhamento.estrategia == estrategia)
+            registros = sessao.scalars(stmt).all()
+            return [self._mapear_para_dominio(r) for r in registros]
+
+    def listar_por_documento(
+        self,
+        id_documento: str,
+        estrategia: str | None = None,
+    ) -> list[Alinhamento]:
+        with Session(self._engine) as sessao:
+            stmt = select(ModeloAlinhamento).where(
+                ModeloAlinhamento.documento_id == id_documento
+            )
             if estrategia:
                 stmt = stmt.where(ModeloAlinhamento.estrategia == estrategia)
             registros = sessao.scalars(stmt).all()

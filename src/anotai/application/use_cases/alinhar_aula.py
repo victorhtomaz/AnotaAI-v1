@@ -28,7 +28,6 @@ def resolver_preset_alinhamento(
     estrategia_base: str = "hybrid",
     modelo_temporal: str = "hmm",
 ) -> tuple[str, str, str]:
-    """Resolve o preset de alinhamento para (estrategia, estrategia_base, modelo_temporal)."""
     mapa_presets = {
         "padrao": ("hierarchical", "hybrid", "hmm"),
         "hmm": ("hierarchical", "bm25", "hmm"),
@@ -59,8 +58,6 @@ def calcular_limiar_abstencao_efetivo(limiar_configurado: float, usa_hmm: bool) 
 
 
 class AlinharAula:
-    """Caso de uso da Fase 6 para alinhamento hierárquico e temporal entre aula e PDF."""
-
     ESTRATEGIAS_SUPORTADAS = {
         "bm25",
         "embedding",
@@ -74,7 +71,7 @@ class AlinharAula:
 
     def __init__(
         self,
-        recuperador: RecuperarCandidatos,
+        recuperador: RecuperarCandidatos | None = None,
         repositorio_alinhamento: RepositorioAlinhamento | None = None,
         estrategia: str = "hierarchical",
         modelo_temporal: str = "kernel",
@@ -84,6 +81,7 @@ class AlinharAula:
         max_paginas: int = 3,
         max_unidades: int = 5,
         incluir_unidades: bool = True,
+        nome_estrategia_persistida: str | None = None,
     ) -> None:
         estrategia_norm = estrategia.strip().lower()
         if estrategia_norm not in self.ESTRATEGIAS_SUPORTADAS:
@@ -118,6 +116,9 @@ class AlinharAula:
         self.max_paginas = max(1, int(max_paginas))
         self.max_unidades = max(1, int(max_unidades))
         self.incluir_unidades = incluir_unidades
+        self.nome_estrategia_persistida = (
+            nome_estrategia_persistida.strip() if nome_estrategia_persistida else None
+        ) or self.estrategia
 
     def executar(
         self,
@@ -129,14 +130,17 @@ class AlinharAula:
             return []
 
         if resultados_recuperacao is None:
-            top_k_pag_original = self.recuperador.top_k_paginas
-            try:
-                self.recuperador.top_k_paginas = max(
-                    top_k_pag_original, len(documento.paginas), 1
+            if self.recuperador is None:
+                raise ValueError(
+                    "RecuperarCandidatos é obrigatório para executar o alinhamento automático."
                 )
+            top_k_alinhamento = max(self.recuperador.top_k_paginas, len(documento.paginas), 1)
+            try:
+                resultados_base = self.recuperador.executar(
+                    aula, documento, top_k_paginas_override=top_k_alinhamento
+                )
+            except TypeError:
                 resultados_base = self.recuperador.executar(aula, documento)
-            finally:
-                self.recuperador.top_k_paginas = top_k_pag_original
         else:
             resultados_base = list(resultados_recuperacao)
 
@@ -221,7 +225,7 @@ class AlinharAula:
                     id_alinhamento=Alinhamento.gerar_id_estavel(
                         inter.id_intervalo,
                         documento.id_documento,
-                        self.estrategia,
+                        self.nome_estrategia_persistida,
                         OrigemAlinhamento.AUTOMATICO.value,
                     ),
                     id_aula=aula.id_aula,
@@ -232,7 +236,7 @@ class AlinharAula:
                     status=StatusAlinhamento.ABSTIDO.value,
                     tipo_relacao=None,
                     confianca=round(melhor_pag_score, 4),
-                    estrategia=self.estrategia,
+                    estrategia=self.nome_estrategia_persistida,
                     ids_evidencias=[],
                     versao_processamento=documento.versao_processamento,
                     justificativa=motivo_abstencao,
@@ -312,7 +316,7 @@ class AlinharAula:
                 id_alinhamento=Alinhamento.gerar_id_estavel(
                     inter.id_intervalo,
                     documento.id_documento,
-                    self.estrategia,
+                    self.nome_estrategia_persistida,
                     OrigemAlinhamento.AUTOMATICO.value,
                 ),
                 id_aula=aula.id_aula,
@@ -323,7 +327,7 @@ class AlinharAula:
                 status=StatusAlinhamento.ALINHADO.value,
                 tipo_relacao=tipo_rel.value if tipo_rel else TipoRelacao.DIRETA.value,
                 confianca=round(topo_pag.pontuacao_final, 4),
-                estrategia=self.estrategia,
+                estrategia=self.nome_estrategia_persistida,
                 ids_evidencias=ids_evidencias,
                 versao_processamento=documento.versao_processamento,
                 justificativa=justificativa,

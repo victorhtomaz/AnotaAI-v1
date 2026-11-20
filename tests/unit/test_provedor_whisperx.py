@@ -13,6 +13,13 @@ def test_resolver_dispositivo_e_tipo_cpu() -> None:
     assert tipo == "int8"
 
 
+def test_resolver_dispositivo_cuda_indisponivel_fallback_cpu() -> None:
+    with patch("torch.cuda.is_available", return_value=False):
+        disp, tipo = ProvedorWhisperX._resolver_dispositivo_e_tipo("cuda", "float16")
+    assert disp == "cpu"
+    assert tipo == "int8"
+
+
 def test_provedor_whisperx_arquivo_inexistente(tmp_path: Path) -> None:
     provedor = ProvedorWhisperX(modelo="tiny", dispositivo="cpu")
     with pytest.raises(ErroTranscricao, match="não encontrado"):

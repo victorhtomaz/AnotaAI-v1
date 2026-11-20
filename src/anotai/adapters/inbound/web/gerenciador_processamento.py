@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 import re
 import threading
@@ -201,18 +200,23 @@ def higienizar_nome_arquivo(nome: str) -> str:
     return limpo or "arquivo"
 
 
-def salvar_upload_unico(diretorio_destino: Path, nome_original: str, conteudo: bytes) -> Path:
-    """Salva o upload sem sobrescrever arquivos originais já existentes."""
-    diretorio_destino.mkdir(parents=True, exist_ok=True)
-    nome_seguro = higienizar_nome_arquivo(nome_original)
-    caminho = diretorio_destino / nome_seguro
-    if caminho.exists():
-        digest = hashlib.sha256(conteudo).hexdigest()[:8]
-        stem = Path(nome_seguro).stem
-        sufixo = Path(nome_seguro).suffix
-        caminho = diretorio_destino / f"{stem}-{digest}{sufixo}"
-    caminho.write_bytes(conteudo)
-    return caminho
+def remover_arquivo_upload_se_orfao(
+    caminho: Path | None,
+    diretorio_uploads: Path,
+    caminhos_em_uso: set[Path],
+) -> None:
+    """Remove um arquivo da pasta de uploads caso não esteja referenciado no acervo."""
+    if caminho is None or not caminho.is_file():
+        return
+    try:
+        resolvido = caminho.resolve()
+        uploads_resolvido = diretorio_uploads.resolve()
+    except OSError:
+        return
+    if not resolvido.is_relative_to(uploads_resolvido):
+        return
+    if resolvido not in caminhos_em_uso:
+        resolvido.unlink(missing_ok=True)
 
 
 class GerenciadorProcessamento:
@@ -331,6 +335,16 @@ class GerenciadorProcessamento:
     def obter_aula_associada(self, id_documento: str) -> str | None:
         with self._lock:
             return self._vinculos_doc_aula.get(id_documento)
+
+    def remover_vinculo_documento(self, id_documento: str) -> None:
+        with self._lock:
+            self._vinculos_doc_aula.pop(id_documento, None)
+
+    def remover_vinculo_aula(self, id_aula: str) -> None:
+        with self._lock:
+            chaves = [k for k, v in self._vinculos_doc_aula.items() if v == id_aula]
+            for chave in chaves:
+                self._vinculos_doc_aula.pop(chave, None)
 
     def cancelar(self, id_job: str) -> TarefaProcessamento | None:
         """Solicita interrupção cooperativa de uma tarefa em fila ou em execução."""
@@ -455,6 +469,38 @@ class GerenciadorProcessamento:
                         etapa.resumo = "Não executado devido a falha anterior"
 
             self._atualizar(id_job, _marcar_erro)
+        finally:
+            if self._foi_cancelado(id_job):
+                self._limpar_uploads_nao_salvos(
+                    caminho_pdf=caminho_pdf if opcoes.executar_pdf else None,
+                    caminho_audio=caminho_audio if opcoes.executar_transcricao else None,
+                    repo_doc=repo_doc,
+                    repo_aula=repo_aula,
+                )
+
+    def _limpar_uploads_nao_salvos(
+        self,
+        *,
+        caminho_pdf: Path | None,
+        caminho_audio: Path | None,
+        repo_doc: Any,
+        repo_aula: Any,
+    ) -> None:
+        if caminho_pdf is not None:
+            docs = repo_doc.listar()
+            docs_em_uso = (
+                {Path(d.uri_origem).resolve() for d in docs} if isinstance(docs, list) else set()
+            )
+            remover_arquivo_upload_se_orfao(caminho_pdf, self.diretorio_uploads, docs_em_uso)
+
+        if caminho_audio is not None:
+            aulas = repo_aula.listar()
+            aulas_em_uso = (
+                {Path(a.caminho_arquivo).resolve() for a in aulas}
+                if isinstance(aulas, list)
+                else set()
+            )
+            remover_arquivo_upload_se_orfao(caminho_audio, self.diretorio_uploads, aulas_em_uso)
 
     def _processar_etapa_pdf_ocr(
         self,
@@ -494,9 +540,12 @@ class GerenciadorProcessamento:
             )
             caso_uso = self._importar_doc_cls(
                 extrator,
-                repositorio=repo_doc,
+                repositorio=None,
             )
             documento = caso_uso.executar(caminho_pdf, opcoes.metodo_pdf)
+            if self._foi_cancelado(id_job):
+                return None
+            repo_doc.salvar(documento)
 
             total_paginas = len(documento.paginas)
             total_unidades = sum(len(p.unidades) for p in documento.paginas)
@@ -596,8 +645,19 @@ class GerenciadorProcessamento:
                 agrupador=agrupador,
                 diretorio_bruto=Path(self.settings.raw_transcripts_directory),
             )
+            aulas_antes_raw = repo_aula.listar()
+            ids_aulas_antes = (
+                {a.id_aula for a in aulas_antes_raw} if isinstance(aulas_antes_raw, list) else None
+            )
             titulo = opcoes.titulo_aula.strip() if opcoes.titulo_aula else None
             aula = caso_uso.executar(caminho_audio, titulo=titulo)
+            if self._foi_cancelado(id_job):
+                if ids_aulas_antes is not None and aula.id_aula not in ids_aulas_antes:
+                    if hasattr(repo_aula, "excluir"):
+                        repo_aula.excluir(aula.id_aula)
+                    bruto = Path(self.settings.raw_transcripts_directory) / f"{aula.id_aula}.json"
+                    bruto.unlink(missing_ok=True)
+                return None
 
             def _finalizar_asr(t: TarefaProcessamento) -> None:
                 t.id_aula = aula.id_aula
@@ -717,49 +777,64 @@ class GerenciadorProcessamento:
             decaimento_salto=self.settings.hmm_jump_decay,
             piso_salto=self.settings.hmm_jump_floor,
         )
-        alinhador = self._alinhar_cls(
-            recuperador=recuperador,
-            repositorio_alinhamento=None,
-            estrategia=estrategia,
-            modelo_temporal=modelo_temporal,
-            pesos=pesos,
-            parametros_hmm=params_hmm,
-            limiar_abstencao=limiar_efetivo,
-            max_paginas=opcoes.max_paginas,
-            max_unidades=opcoes.max_unidades,
-        )
-        resultados = alinhador.executar(aula, documento)
-
         modelo_efetivo = "none" if sem_temporal else modelo_temporal
         estrategia_composta = f"{estrategia}_{modelo_efetivo}+{estrategia_busca}"
-        alinhamentos_para_salvar: list[Alinhamento] = []
-        for r in resultados:
-            a = r.alinhamento
-            alinhamentos_para_salvar.append(
-                Alinhamento(
-                    id_alinhamento=Alinhamento.gerar_id_estavel(
-                        a.id_intervalo,
-                        a.id_documento,
-                        estrategia_composta,
-                        a.origem,
-                    ),
-                    id_aula=a.id_aula,
-                    id_documento=a.id_documento,
-                    id_intervalo=a.id_intervalo,
-                    ids_paginas=list(a.ids_paginas),
-                    ids_unidades=list(a.ids_unidades),
-                    status=a.status,
-                    tipo_relacao=a.tipo_relacao,
-                    confianca=a.confianca,
-                    estrategia=estrategia_composta,
-                    ids_evidencias=list(a.ids_evidencias),
-                    versao_processamento=a.versao_processamento,
-                    justificativa=a.justificativa,
-                    origem=a.origem,
-                )
+        if self._alinhar_cls is AlinharAula:
+            alinhador = self._alinhar_cls(
+                recuperador=recuperador,
+                repositorio_alinhamento=repo_alin,
+                estrategia=estrategia,
+                modelo_temporal=modelo_temporal,
+                pesos=pesos,
+                parametros_hmm=params_hmm,
+                limiar_abstencao=limiar_efetivo,
+                max_paginas=opcoes.max_paginas,
+                max_unidades=opcoes.max_unidades,
+                nome_estrategia_persistida=estrategia_composta,
             )
-        if alinhamentos_para_salvar:
-            repo_alin.salvar_lote(alinhamentos_para_salvar)
+            resultados = alinhador.executar(aula, documento)
+        else:
+            alinhador = self._alinhar_cls(
+                recuperador=recuperador,
+                repositorio_alinhamento=None,
+                estrategia=estrategia,
+                modelo_temporal=modelo_temporal,
+                pesos=pesos,
+                parametros_hmm=params_hmm,
+                limiar_abstencao=limiar_efetivo,
+                max_paginas=opcoes.max_paginas,
+                max_unidades=opcoes.max_unidades,
+            )
+            resultados = alinhador.executar(aula, documento)
+
+            alinhamentos_para_salvar: list[Alinhamento] = []
+            for r in resultados:
+                a = r.alinhamento
+                alinhamentos_para_salvar.append(
+                    Alinhamento(
+                        id_alinhamento=Alinhamento.gerar_id_estavel(
+                            a.id_intervalo,
+                            a.id_documento,
+                            estrategia_composta,
+                            a.origem,
+                        ),
+                        id_aula=a.id_aula,
+                        id_documento=a.id_documento,
+                        id_intervalo=a.id_intervalo,
+                        ids_paginas=list(a.ids_paginas),
+                        ids_unidades=list(a.ids_unidades),
+                        status=a.status,
+                        tipo_relacao=a.tipo_relacao,
+                        confianca=a.confianca,
+                        estrategia=estrategia_composta,
+                        ids_evidencias=list(a.ids_evidencias),
+                        versao_processamento=a.versao_processamento,
+                        justificativa=a.justificativa,
+                        origem=a.origem,
+                    )
+                )
+            if alinhamentos_para_salvar:
+                repo_alin.salvar_lote(alinhamentos_para_salvar)
 
         total = len(resultados)
         alinhados = sum(

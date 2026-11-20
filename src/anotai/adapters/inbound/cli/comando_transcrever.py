@@ -5,9 +5,12 @@ from pathlib import Path
 from typing import Any
 
 from anotai.adapters.inbound.cli.formatador_terminal import formatar_aula_texto
-from anotai.adapters.outbound.audio import InspetorFFmpeg, ProvedorWhisperX
-from anotai.adapters.outbound.persistence import RepositorioAulaSQLite
 from anotai.application.use_cases import AgrupadorIntervalos, TranscreverAula
+from anotai.bootstrap import (
+    criar_inspetor_audio,
+    criar_provedor_transcricao,
+    obter_classes_repositorios,
+)
 from anotai.config import Settings
 from anotai.domain.exceptions import ErroAudio, ErroIntegridade
 
@@ -47,22 +50,24 @@ def executar_comando_transcrever(
     args: argparse.Namespace,
     settings: Settings,
     transcrever_cls: Any = TranscreverAula,
-    repo_cls: Any = RepositorioAulaSQLite,
+    repo_cls: Any = None,
 ) -> int:
-    inspetor = InspetorFFmpeg()
+    inspetor = criar_inspetor_audio()
     modelo = args.model or settings.whisperx_model
     dispositivo = args.device or settings.whisperx_device
     tipo_computacao = args.compute_type or settings.whisperx_compute_type
     alinhar = args.align_phonemes or settings.whisperx_align_phonemes
 
-    provedor = ProvedorWhisperX(
+    provedor = criar_provedor_transcricao(
         modelo=modelo,
         dispositivo=dispositivo,
         tipo_computacao=tipo_computacao,
         alinhar_fonemas=alinhar,
     )
 
-    repositorio = repo_cls(Path(settings.database_path))
+    _, padrao_aula_cls, _ = obter_classes_repositorios()
+    repo_aula_cls = repo_cls or padrao_aula_cls
+    repositorio = repo_aula_cls(Path(settings.database_path))
     agrupador = AgrupadorIntervalos(
         limiar_silencio=settings.interval_silence_threshold,
         duracao_minima=settings.interval_min_duration,

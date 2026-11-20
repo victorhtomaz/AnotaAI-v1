@@ -8,6 +8,7 @@ from anotai.adapters.outbound.persistence import (
     RepositorioAlinhamentoSQLite,
     RepositorioAulaSQLite,
     RepositorioDocumentoSQLite,
+    inicializar_engine_sqlite,
 )
 from anotai.application.ports import (
     RenderizadorDocumento,
@@ -31,10 +32,11 @@ def criar_repositorios(
     banco_path: Path,
 ) -> tuple[RepositorioDocumento, RepositorioAula, RepositorioAlinhamento]:
     """Instancia os repositórios concretos de documentos, aulas e alinhamentos."""
+    engine = inicializar_engine_sqlite(banco_path)
     return (
-        RepositorioDocumentoSQLite(banco_path),
-        RepositorioAulaSQLite(banco_path),
-        RepositorioAlinhamentoSQLite(banco_path),
+        RepositorioDocumentoSQLite(banco_path, engine=engine),
+        RepositorioAulaSQLite(banco_path, engine=engine),
+        RepositorioAlinhamentoSQLite(banco_path, engine=engine),
     )
 
 

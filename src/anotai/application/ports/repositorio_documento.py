@@ -19,3 +19,11 @@ class RepositorioDocumento(Protocol):
     def existe(self, id_documento: str) -> bool:
         """Verifica se um documento já foi persistido no banco."""
         ...
+
+    def buscar_por_termo(self, termo: str) -> list[tuple[str, str]]:
+        """Busca documentos cujo ID ou título contenham o termo informado."""
+        ...
+
+    def excluir(self, id_documento: str) -> bool:
+        """Remove um documento e seus dados associados por cascade. Retorna True se removido."""
+        ...

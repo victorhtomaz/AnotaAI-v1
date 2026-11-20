@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session, selectinload
 
 from anotai.application.ports.repositorio_aula import RepositorioAula
@@ -14,15 +14,14 @@ from anotai.domain.entities import (
 )
 from anotai.domain.value_objects import IntervaloTempo, MetadadosAudio
 
-from .base import Base, criar_engine_sqlite
+from .base import inicializar_engine_sqlite
 from .modelo_aula import ModeloAula, ModeloIntervaloExplicativo, ModeloSegmentoTranscricao
 
 
 class RepositorioAulaSQLite(RepositorioAula):
-    def __init__(self, caminho_banco: Path) -> None:
+    def __init__(self, caminho_banco: Path, engine: Engine | None = None) -> None:
         self.caminho_banco = caminho_banco
-        self._engine = criar_engine_sqlite(caminho_banco)
-        Base.metadata.create_all(self._engine)
+        self._engine = engine if engine is not None else inicializar_engine_sqlite(caminho_banco)
 
     def salvar(self, aula: Aula, carga_bruta_asr: dict[str, Any] | None = None) -> None:
         ValidadorIntegridade.validar_aula(aula)
@@ -135,6 +134,15 @@ class RepositorioAulaSQLite(RepositorioAula):
                 | (ModeloAula.titulo.ilike(f"%{termo_limpo}%"))
             )
             return [(row[0], row[1]) for row in sessao.execute(stmt)]
+
+    def excluir(self, id_aula: str) -> bool:
+        with Session(self._engine) as sessao:
+            registro = sessao.get(ModeloAula, id_aula)
+            if registro is None:
+                return False
+            sessao.delete(registro)
+            sessao.commit()
+            return True
 
     @staticmethod
     def _mapear_para_dominio(registro: ModeloAula) -> Aula:

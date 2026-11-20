@@ -3,16 +3,14 @@
 
     const TIPOS_UNIDADE_PT = {
         title: "Título",
-        section_header: "Seção",
         paragraph: "Parágrafo",
-        list_item: "Item",
+        formula: "Fórmula",
         table: "Tabela",
+        graph: "Gráfico",
         figure: "Figura",
         caption: "Legenda",
-        equation: "Equação",
-        code: "Código",
-        header: "Cabeçalho",
-        footer: "Rodapé",
+        block: "Bloco",
+        group: "Grupo",
     };
 
     function traduzirTipoUnidade(tipo) {

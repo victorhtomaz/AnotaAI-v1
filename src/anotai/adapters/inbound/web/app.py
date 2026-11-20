@@ -18,6 +18,7 @@ from .gerenciador_processamento import (
     EXTENSOES_AUDIO_SUPORTADAS,
     GerenciadorProcessamento,
     OpcoesProcessamento,
+    remover_arquivo_upload_se_orfao,
 )
 from .parsers import extrair_opcoes, salvar_arquivo_se_enviado
 from .schemas import (
@@ -412,5 +413,40 @@ def criar_app(
         return servir_audio_com_range(
             Path(aula.caminho_arquivo), request.headers.get("range")
         )
+
+    @app.delete("/api/documentos/{id_documento}")
+    def excluir_documento(id_documento: str) -> dict[str, Any]:
+        repo_doc, _, _ = abrir_repositorios(cfg)
+        documento = repo_doc.buscar_por_id(id_documento)
+        if documento is None:
+            raise HTTPException(
+                status_code=404, detail=f"Documento '{id_documento}' não encontrado."
+            )
+
+        repo_doc.excluir(id_documento)
+        gestor.remover_vinculo_documento(id_documento)
+        caminhos_em_uso = {Path(d.uri_origem).resolve() for d in repo_doc.listar()}
+        remover_arquivo_upload_se_orfao(
+            Path(documento.uri_origem), gestor.diretorio_uploads, caminhos_em_uso
+        )
+        return {"ok": True, "id_documento": id_documento}
+
+    @app.delete("/api/aulas/{id_aula}")
+    def excluir_aula(id_aula: str) -> dict[str, Any]:
+        _, repo_aula, _ = abrir_repositorios(cfg)
+        aula = repo_aula.buscar_por_id(id_aula)
+        if aula is None:
+            raise HTTPException(
+                status_code=404, detail=f"Aula '{id_aula}' não encontrada."
+            )
+
+        repo_aula.excluir(id_aula)
+        gestor.remover_vinculo_aula(id_aula)
+        caminhos_em_uso = {Path(a.caminho_arquivo).resolve() for a in repo_aula.listar()}
+        remover_arquivo_upload_se_orfao(
+            Path(aula.caminho_arquivo), gestor.diretorio_uploads, caminhos_em_uso
+        )
+        (Path(cfg.raw_transcripts_directory) / f"{id_aula}.json").unlink(missing_ok=True)
+        return {"ok": True, "id_aula": id_aula}
 
     return app

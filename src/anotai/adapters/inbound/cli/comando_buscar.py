@@ -5,9 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from anotai.adapters.inbound.cli.formatador_terminal import formatar_recuperacao_texto
-from anotai.adapters.outbound.persistence import RepositorioAulaSQLite, RepositorioDocumento
 from anotai.application.use_cases.recuperar_candidatos import RecuperarCandidatos
-from anotai.bootstrap import construir_indices_busca
+from anotai.bootstrap import construir_indices_busca, obter_classes_repositorios
 from anotai.config import Settings
 from anotai.domain.exceptions import ErroBusca
 
@@ -180,13 +179,16 @@ def resolver_documento_cli(repo_doc: Any, termo_id: str | None) -> Any | None:
 def executar_comando_buscar(
     args: argparse.Namespace,
     settings: Settings,
-    repo_aula_cls: Any = RepositorioAulaSQLite,
-    repo_doc_cls: Any = RepositorioDocumento,
+    repo_aula_cls: Any = None,
+    repo_doc_cls: Any = None,
     recuperador_cls: Any = RecuperarCandidatos,
 ) -> int:
+    padrao_doc_cls, padrao_aula_cls, _ = obter_classes_repositorios()
+    repo_aula_impl = repo_aula_cls or padrao_aula_cls
+    repo_doc_impl = repo_doc_cls or padrao_doc_cls
     banco_path = Path(settings.database_path)
-    repo_aula = repo_aula_cls(banco_path)
-    repo_doc = repo_doc_cls(banco_path)
+    repo_aula = repo_aula_impl(banco_path)
+    repo_doc = repo_doc_impl(banco_path)
 
     aula = resolver_aula_cli(repo_aula, args.id_aula)
     if aula is None:

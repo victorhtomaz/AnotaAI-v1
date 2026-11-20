@@ -303,7 +303,8 @@ def test_spa_index_assets_locais_e_opcoes_padrao(tmp_path: Path) -> None:
     assert "$store.anotai.opcoesAlinhamentoDisponiveis" in html
     assert 'value="hierarchical_hmm"' not in html
     assert 'value="temporal_hmm"' not in html
-    for termo_tecnico in ("Ollama", "WhisperX", "BM25", "HMM", "CUDA", "Kernel", "ASR"):
+    assert "GPU CUDA" in html
+    for termo_tecnico in ("Ollama", "WhisperX", "BM25", "HMM", "Kernel", "ASR"):
         assert termo_tecnico not in html
 
 
@@ -699,7 +700,51 @@ def test_cancelar_processamento_interrompe_etapas_subsequentes(tmp_path: Path) -
     liberar_etapa.set()
     gestor._executor.shutdown(wait=True)
     assert not transcricao_chamada.is_set()
+    assert not list(gestor.diretorio_uploads.glob("*"))
     assert client.post("/api/jobs/job-inexistente/cancelar").status_code == 404
+
+
+def test_excluir_documento_e_aula_remove_banco_e_uploads(tmp_path: Path) -> None:
+    cfg = _settings_isoladas(tmp_path)
+    banco = Path(cfg.database_path)
+    gestor = GerenciadorProcessamento(settings=cfg)
+    gestor.diretorio_uploads.mkdir(parents=True, exist_ok=True)
+
+    pdf_upload = gestor.diretorio_uploads / "slides_del.pdf"
+    audio_upload = gestor.diretorio_uploads / "aula_del.wav"
+    pdf_upload.write_bytes(b"%PDF-1.4")
+    audio_upload.write_bytes(b"RIFF")
+
+    doc = _documento_ficticio(pdf_upload)
+    aula = _aula_ficticia(audio_upload)
+
+    repo_doc = RepositorioDocumentoSQLite(banco)
+    repo_aula = RepositorioAulaSQLite(banco)
+    repo_doc.salvar(doc)
+    repo_aula.salvar(aula)
+
+    bruto_dir = Path(cfg.raw_transcripts_directory)
+    bruto_dir.mkdir(parents=True, exist_ok=True)
+    bruto_json = bruto_dir / f"{aula.id_aula}.json"
+    bruto_json.write_text("{}", encoding="utf-8")
+
+    app = criar_app(settings=cfg, gerenciador=gestor)
+    client = ClienteTesteASGI(app)
+
+    resp_del_doc = client.delete(f"/api/documentos/{doc.id_documento}")
+    assert resp_del_doc.status_code == 200
+    assert resp_del_doc.json() == {"ok": True, "id_documento": doc.id_documento}
+    assert repo_doc.buscar_por_id(doc.id_documento) is None
+    assert not pdf_upload.exists()
+    assert client.delete(f"/api/documentos/{doc.id_documento}").status_code == 404
+
+    resp_del_aula = client.delete(f"/api/aulas/{aula.id_aula}")
+    assert resp_del_aula.status_code == 200
+    assert resp_del_aula.json() == {"ok": True, "id_aula": aula.id_aula}
+    assert repo_aula.buscar_por_id(aula.id_aula) is None
+    assert not audio_upload.exists()
+    assert not bruto_json.exists()
+    assert client.delete(f"/api/aulas/{aula.id_aula}").status_code == 404
 
 
 def test_limiar_abstencao_padrao_hmm_e_sem_hmm(tmp_path: Path) -> None:
@@ -795,6 +840,8 @@ def test_modulos_js_e_contratos_frontend_presentes(tmp_path: Path) -> None:
     assert "Object.getOwnPropertyDescriptors" in app_js
 
     imp_js = (DIRETORIO_STATIC / "js" / "modulo-importacao.js").read_text(encoding="utf-8")
+    assert "limparCamposSelecao" in imp_js
+    assert 'dados.status_geral === "concluido"' in imp_js
     for modo in ("padrao", "rapido", "semantico", "lexical"):
         estrategia, base, temporal = resolver_configuracao_alinhamento(
             OpcoesProcessamento(modo_alinhamento=modo)
@@ -997,5 +1044,96 @@ def test_vinculo_serializa_metricas_estruturadas_e_remocao_parcial(tmp_path: Pat
     assert atualizado["ids_unidades"] == ["doc-web-1-p2-u1"]
     assert atualizado["manual"] is True
     assert atualizado["metricas"] is None
+
+
+def test_fronteira_hexagonal_dominio_e_aplicacao() -> None:
+    import ast
+
+    import anotai
+
+    raiz_pacote = Path(anotai.__file__).resolve().parent
+    proibidos_comuns = (
+        "anotai.adapters",
+        "anotai.bootstrap",
+        "anotai.config",
+        "fastapi",
+        "sqlalchemy",
+        "pymupdf",
+        "fitz",
+        "ollama",
+        "whisperx",
+        "torch",
+        "bm25s",
+        "numpy",
+    )
+
+    for camada, proibidos in (
+        ("domain", (*proibidos_comuns, "anotai.application")),
+        ("application", proibidos_comuns),
+    ):
+        for arquivo_py in sorted((raiz_pacote / camada).rglob("*.py")):
+            arvore = ast.parse(arquivo_py.read_text(encoding="utf-8"), filename=str(arquivo_py))
+            for no in ast.walk(arvore):
+                if isinstance(no, ast.Import):
+                    for alias in no.names:
+                        assert not alias.name.startswith(proibidos), (
+                            f"Violação hexagonal em {camada}/{arquivo_py.name}: import {alias.name}"
+                        )
+                elif isinstance(no, ast.ImportFrom) and no.module:
+                    assert not no.module.startswith(proibidos), (
+                        f"Violação hexagonal em {camada}/{arquivo_py.name}: from {no.module}"
+                    )
+
+
+def test_traducoes_unidades_pdf_viewer_e_selecao_vinculo_mais_recente() -> None:
+    from anotai.application.use_cases import ConsultarAcervo
+
+    pdf_viewer_js = (DIRETORIO_STATIC / "js" / "pdf-viewer.js").read_text(encoding="utf-8")
+    for tipo in sorted(UnidadeDocumento.TIPOS_VALIDOS):
+        assert f"{tipo}:" in pdf_viewer_js
+
+    auto_antigo = Alinhamento(
+        id_alinhamento="align-auto-1",
+        id_aula="aula-1",
+        id_documento="doc-1",
+        id_intervalo="int-1",
+        ids_paginas=["p1"],
+        status="aligned",
+        tipo_relacao="direct",
+        confianca=0.6,
+        estrategia="bm25",
+        origem="automatic",
+    )
+    auto_recente = Alinhamento(
+        id_alinhamento="align-auto-2",
+        id_aula="aula-1",
+        id_documento="doc-1",
+        id_intervalo="int-1",
+        ids_paginas=["p2"],
+        status="aligned",
+        tipo_relacao="direct",
+        confianca=0.85,
+        estrategia="hierarchical_hmm",
+        origem="automatic",
+    )
+    ativos_auto = ConsultarAcervo.selecionar_vinculos_ativos([auto_antigo, auto_recente])
+    assert ativos_auto["int-1"].id_alinhamento == "align-auto-2"
+
+    manual = Alinhamento(
+        id_alinhamento="align-manual-1",
+        id_aula="aula-1",
+        id_documento="doc-1",
+        id_intervalo="int-1",
+        ids_paginas=["p3"],
+        status="aligned",
+        tipo_relacao="reference",
+        confianca=1.0,
+        estrategia="manual",
+        origem="manual",
+    )
+    ativos_com_manual = ConsultarAcervo.selecionar_vinculos_ativos(
+        [auto_antigo, manual, auto_recente]
+    )
+    assert ativos_com_manual["int-1"].id_alinhamento == "align-manual-1"
 
 

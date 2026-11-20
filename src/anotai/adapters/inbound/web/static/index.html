@@ -340,7 +340,7 @@
                                         name="dispositivo_whisperx"
                                         x-model="$store.anotai.opcoes.dispositivo_whisperx"
                                     >
-                                        <option value="cuda">Placa de vídeo (GPU)</option>
+                                        <option value="cuda">Placa de vídeo (GPU CUDA)</option>
                                         <option value="cpu">CPU</option>
                                         <option value="auto">Automático</option>
                                     </select>
@@ -831,20 +831,63 @@
                                                 <span x-text="`${doc.alinhamentos} alin.`"></span>
                                             </div>
                                         </div>
-                                        <button
-                                            type="button"
-                                            class="botao-secundario botao-compacto"
-                                            @click="$store.anotai.abrirDocumento(doc.id_documento, doc.id_aula)"
-                                        >
-                                            <span x-text="doc.id_aula ? 'Abrir aula' : 'Abrir PDF'">Abrir aula</span>
-                                            <svg class="m-arrow" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                <path d="M3 8h10M9 4l4 4-4 4"/>
-                                            </svg>
-                                        </button>
+                                        <div style="display: flex; gap: 6px; align-items: center;">
+                                            <button
+                                                type="button"
+                                                class="botao-secundario botao-compacto"
+                                                @click="$store.anotai.abrirDocumento(doc.id_documento, doc.id_aula)"
+                                            >
+                                                <span x-text="doc.id_aula ? 'Abrir aula' : 'Abrir PDF'">Abrir aula</span>
+                                                <svg class="m-arrow" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <path d="M3 8h10M9 4l4 4-4 4"/>
+                                                </svg>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="botao-perigo botao-compacto"
+                                                :disabled="$store.anotai.excluindoId === doc.id_documento"
+                                                @click="$store.anotai.excluirDocumento(doc)"
+                                                title="Apagar arquivo PDF e seus alinhamentos"
+                                            >
+                                                Apagar
+                                            </button>
+                                        </div>
                                     </div>
                                 </li>
                             </template>
                         </ul>
+
+                        <div x-show="$store.anotai.aulas.length > 0" style="margin-top: 16px;">
+                            <p class="campo-rotulo" style="margin-bottom: 8px;">Aulas transcritas</p>
+                            <ul class="acervo-lista">
+                                <template x-for="aula in $store.anotai.aulas" :key="aula.id_aula">
+                                    <li class="acervo-item">
+                                        <div class="acervo-item-topo">
+                                            <div class="acervo-item-info">
+                                                <div class="acervo-item-titulo">
+                                                    <strong x-text="aula.titulo" :title="aula.titulo"></strong>
+                                                    <code class="codigo-id" x-text="aula.id_aula"></code>
+                                                </div>
+                                                <div class="acervo-item-detalhes tabular">
+                                                    <span x-text="$store.anotai.formatarDuracaoCurta(aula.duracao)"></span>
+                                                    <span x-text="`${aula.intervalos} intervalos`"></span>
+                                                    <span x-text="`${aula.alinhamentos} alin.`"></span>
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                class="botao-perigo botao-compacto"
+                                                :disabled="$store.anotai.excluindoId === aula.id_aula"
+                                                @click="$store.anotai.excluirAula(aula)"
+                                                title="Apagar aula, transcrição e alinhamentos"
+                                            >
+                                                Apagar
+                                            </button>
+                                        </div>
+                                    </li>
+                                </template>
+                            </ul>
+                        </div>
                     </section>
                 </aside>
             </div>

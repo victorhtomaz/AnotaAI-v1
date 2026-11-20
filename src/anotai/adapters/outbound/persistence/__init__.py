@@ -1,4 +1,4 @@
-from .base import Base, criar_engine_sqlite
+from .base import Base, criar_engine_sqlite, inicializar_engine_sqlite
 from .modelo_alinhamento import (
     ModeloAlinhamento,
     ModeloAlinhamentoPagina,
@@ -42,4 +42,5 @@ __all__ = [
     "RepositorioDocumento",
     "RepositorioDocumentoSQLite",
     "criar_engine_sqlite",
+    "inicializar_engine_sqlite",
 ]

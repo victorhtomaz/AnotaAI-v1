@@ -51,6 +51,11 @@ class ProvedorWhisperX(ProvedorTranscricao):
         dispositivo_resolvido = dispositivo
         if dispositivo_resolvido in ("auto", None):
             dispositivo_resolvido = "cuda" if torch.cuda.is_available() else "cpu"
+        elif dispositivo_resolvido == "cuda" and not torch.cuda.is_available():
+            logger.warning(
+                "Dispositivo CUDA solicitado mas indisponível; fazendo fallback para CPU."
+            )
+            dispositivo_resolvido = "cpu"
 
         tipo_resolvido = tipo_computacao
         if tipo_resolvido in ("auto", None):

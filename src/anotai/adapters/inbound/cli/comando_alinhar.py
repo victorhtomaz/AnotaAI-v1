@@ -5,18 +5,26 @@ from pathlib import Path
 from typing import Any
 
 from anotai.adapters.inbound.cli.comando_buscar import (
-    construir_indices_busca,
     resolver_aula_cli,
     resolver_documento_cli,
 )
 from anotai.adapters.inbound.cli.formatador_terminal import formatar_alinhamento_texto
-from anotai.adapters.outbound.persistence import (
-    RepositorioAlinhamentoSQLite,
-    RepositorioAulaSQLite,
-    RepositorioDocumento,
+from anotai.application.use_cases import (
+    AgrupadorIntervalos,
+    AlinharAula,
+    ImportarDocumento,
+    RecuperarCandidatos,
+    TranscreverAula,
+    resolver_preset_alinhamento,
 )
-from anotai.application.use_cases.alinhar_aula import AlinharAula
-from anotai.application.use_cases.recuperar_candidatos import RecuperarCandidatos
+from anotai.bootstrap import (
+    construir_indices_busca,
+    criar_analisador_visual,
+    criar_extrator_documento,
+    criar_inspetor_audio,
+    criar_provedor_transcricao,
+    obter_classes_repositorios,
+)
 from anotai.config import Settings
 from anotai.domain.exceptions import ErroBusca, ErroIntegridade
 from anotai.domain.value_objects import (
@@ -171,16 +179,17 @@ def configurar_parser_alinhar(subparsers: argparse._SubParsersAction) -> None:
 def executar_comando_alinhar(
     args: argparse.Namespace,
     settings: Settings,
-    repo_aula_cls: Any = RepositorioAulaSQLite,
-    repo_doc_cls: Any = RepositorioDocumento,
-    repo_alin_cls: Any = RepositorioAlinhamentoSQLite,
+    repo_aula_cls: Any = None,
+    repo_doc_cls: Any = None,
+    repo_alin_cls: Any = None,
     recuperador_cls: Any = RecuperarCandidatos,
     alinhador_cls: Any = AlinharAula,
 ) -> int:
+    padrao_doc_cls, padrao_aula_cls, padrao_alin_cls = obter_classes_repositorios()
     banco_path = Path(settings.database_path)
-    repo_aula = repo_aula_cls(banco_path)
-    repo_doc = repo_doc_cls(banco_path)
-    repo_alin = repo_alin_cls(banco_path)
+    repo_aula = (repo_aula_cls or padrao_aula_cls)(banco_path)
+    repo_doc = (repo_doc_cls or padrao_doc_cls)(banco_path)
+    repo_alin = (repo_alin_cls or padrao_alin_cls)(banco_path)
 
     id_aula_arg = getattr(args, "id_aula", None)
     id_doc_arg = getattr(args, "id_documento", None)
@@ -200,23 +209,16 @@ def executar_comando_alinhar(
         caminho_pdf = Path(id_doc_arg)
         doc_existente = resolver_documento_cli(repo_doc, str(caminho_pdf))
         if doc_existente is None:
-            from ollama import Client
-
-            from anotai.adapters.outbound.ollama import AnalisadorVisualOllama
-            from anotai.adapters.outbound.pdf import ExtratorPDF
-            from anotai.application.use_cases import ImportarDocumento
-
             print(f"Indexando documento PDF '{caminho_pdf.name}'...")
-            analisador = AnalisadorVisualOllama(
-                Client(host=settings.ollama_url),
+            analisador = criar_analisador_visual(
+                settings,
                 settings.visual_model,
                 temperatura=settings.visual_temperature,
                 seed=settings.visual_seed,
                 pensar=settings.visual_think,
-                manter_vivo=settings.ollama_keep_alive,
             )
             caso_doc = ImportarDocumento(
-                ExtratorPDF(analisador), repositorio=repo_doc
+                criar_extrator_documento(analisador), repositorio=repo_doc
             )
             doc_novo = caso_doc.executar(caminho_pdf, "native_then_ocr")
             id_doc_arg = doc_novo.id_documento
@@ -227,12 +229,9 @@ def executar_comando_alinhar(
         caminho_audio = Path(id_aula_arg)
         aula_existente = resolver_aula_cli(repo_aula, str(caminho_audio))
         if aula_existente is None:
-            from anotai.adapters.outbound.audio import InspetorFFmpeg, ProvedorWhisperX
-            from anotai.application.use_cases import AgrupadorIntervalos, TranscreverAula
-
             print(f"Transcrevendo áudio '{caminho_audio.name}'...")
-            inspetor = InspetorFFmpeg()
-            provedor = ProvedorWhisperX(
+            inspetor = criar_inspetor_audio()
+            provedor = criar_provedor_transcricao(
                 modelo=settings.whisperx_model,
                 dispositivo=settings.whisperx_device,
                 tipo_computacao=settings.whisperx_compute_type,
@@ -325,22 +324,8 @@ def executar_comando_alinhar(
     modelo_temporal = getattr(args, "temporal_model", "kernel")
     base_strategy = getattr(args, "base_strategy", "bm25")
 
-    if modo in ("hmm", "padrao"):
-        estrategia = "hierarchical"
-        modelo_temporal = "hmm"
-        base_strategy = "bm25"
-    elif modo in ("rapido", "kernel"):
-        estrategia = "hierarchical"
-        modelo_temporal = "kernel"
-        base_strategy = "bm25"
-    elif modo == "semantico":
-        estrategia = "embedding"
-        modelo_temporal = "kernel"
-        base_strategy = "embedding"
-    elif modo == "lexical":
-        estrategia = "bm25"
-        modelo_temporal = "kernel"
-        base_strategy = "bm25"
+    if isinstance(modo, str) and modo:
+        estrategia, base_strategy, modelo_temporal = resolver_preset_alinhamento(modo)
     elif estrategia is None:
         # Padrão inteligente recomendado para o projeto
         estrategia = "hierarchical"

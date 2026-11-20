@@ -30,9 +30,11 @@ from anotai.adapters.inbound.cli.comando_web import (
     executar_comando_web,
 )
 from anotai.adapters.inbound.cli.formatador_terminal import formatar_aula_texto
-from anotai.adapters.outbound.persistence import RepositorioAulaSQLite
 from anotai.application.use_cases import TranscreverAula
+from anotai.bootstrap import obter_classes_repositorios
 from anotai.config import Settings
+
+_, RepositorioAulaSQLite, _ = obter_classes_repositorios()
 
 
 def processar_pdf(args: argparse.Namespace, settings: Settings) -> int:

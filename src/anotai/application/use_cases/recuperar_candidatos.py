@@ -10,8 +10,6 @@ from anotai.domain.value_objects import (
 
 
 class RecuperarCandidatos:
-    """Caso de uso para recuperação de páginas e unidades a partir de intervalos de fala."""
-
     def __init__(
         self,
         indice_paginas: IndiceBusca,
@@ -29,7 +27,11 @@ class RecuperarCandidatos:
         self.limiar_abstencao = max(0.0, float(limiar_abstencao))
 
     def executar(
-        self, aula: Aula, documento: Documento
+        self,
+        aula: Aula,
+        documento: Documento,
+        *,
+        top_k_paginas_override: int | None = None,
     ) -> list[ResultadoRecuperacaoIntervalo]:
         # 1. Preparação dos itens para indexação
         itens_paginas: list[tuple[str, str]] = [
@@ -127,7 +129,12 @@ class RecuperarCandidatos:
             candidatos_pagina_todos.sort(key=lambda c: c.pontuacao, reverse=True)
             candidatos_unidade_todos.sort(key=lambda c: c.pontuacao, reverse=True)
 
-            candidatos_pagina_final = tuple(candidatos_pagina_todos[: self.top_k_paginas])
+            limite_paginas = (
+                max(1, top_k_paginas_override)
+                if top_k_paginas_override is not None
+                else self.top_k_paginas
+            )
+            candidatos_pagina_final = tuple(candidatos_pagina_todos[:limite_paginas])
             candidatos_unidade_final = tuple(candidatos_unidade_todos[: self.top_k_unidades])
 
             # Decisão de abstenção

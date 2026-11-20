@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session, selectinload
 
 from anotai.application.ports.repositorio_documento import (
@@ -15,7 +15,7 @@ from anotai.domain.entities import (
 )
 from anotai.domain.value_objects import CaixaDelimitadora, ProvenienciaDocumento
 
-from .base import Base, criar_engine_sqlite
+from .base import inicializar_engine_sqlite
 from .modelo_documento import (
     ModeloDocumento,
     ModeloPagina,
@@ -25,10 +25,9 @@ from .modelo_documento import (
 
 
 class RepositorioDocumentoSQLite(RepositorioDocumentoPort):
-    def __init__(self, caminho_banco: Path) -> None:
+    def __init__(self, caminho_banco: Path, engine: Engine | None = None) -> None:
         self.caminho_banco = caminho_banco
-        self._engine = criar_engine_sqlite(caminho_banco)
-        Base.metadata.create_all(self._engine)
+        self._engine = engine if engine is not None else inicializar_engine_sqlite(caminho_banco)
 
     def salvar(self, documento: Documento) -> None:
         ValidadorIntegridade.validar_documento(documento)
@@ -144,6 +143,15 @@ class RepositorioDocumentoSQLite(RepositorioDocumentoPort):
         with Session(self._engine) as sessao:
             stmt = select(1).where(ModeloDocumento.id == id_documento)
             return sessao.scalar(stmt) is not None
+
+    def excluir(self, id_documento: str) -> bool:
+        with Session(self._engine) as sessao:
+            registro = sessao.get(ModeloDocumento, id_documento)
+            if registro is None:
+                return False
+            sessao.delete(registro)
+            sessao.commit()
+            return True
 
     def buscar_por_termo(self, termo: str) -> list[tuple[str, str]]:
         termo_limpo = termo.strip()

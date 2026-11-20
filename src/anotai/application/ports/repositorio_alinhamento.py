@@ -31,6 +31,14 @@ class RepositorioAlinhamento(Protocol):
         """Lista alinhamentos de uma aula, opcionalmente filtrados por documento e estratégia."""
         ...
 
+    def listar_por_documento(
+        self,
+        id_documento: str,
+        estrategia: str | None = None,
+    ) -> list[Alinhamento]:
+        """Lista alinhamentos associados a um documento, opcionalmente filtrados por estratégia."""
+        ...
+
     def listar_por_pagina(
         self, id_pagina: str, estrategia: str | None = None
     ) -> list[Alinhamento]:

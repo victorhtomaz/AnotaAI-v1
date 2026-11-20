@@ -4,11 +4,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from anotai.adapters.outbound.persistence import (
-    RepositorioAlinhamentoSQLite,
-    RepositorioAulaSQLite,
-    RepositorioDocumentoSQLite,
-)
+from anotai.bootstrap import obter_classes_repositorios
 from anotai.config import Settings
 
 
@@ -28,18 +24,19 @@ def configurar_parser_listar(subparsers: argparse._SubParsersAction) -> None:
 def executar_comando_listar(
     args: argparse.Namespace,
     settings: Settings,
-    repo_aula_cls: Any = RepositorioAulaSQLite,
-    repo_doc_cls: Any = RepositorioDocumentoSQLite,
-    repo_alin_cls: Any = RepositorioAlinhamentoSQLite,
+    repo_aula_cls: Any = None,
+    repo_doc_cls: Any = None,
+    repo_alin_cls: Any = None,
 ) -> int:
     banco_path = Path(settings.database_path)
     if not banco_path.exists():
         print("Banco de dados ainda não inicializado. Nenhum item cadastrado.", file=sys.stderr)
         return 0
 
-    repo_aula = repo_aula_cls(banco_path)
-    repo_doc = repo_doc_cls(banco_path)
-    repo_alin = repo_alin_cls(banco_path)
+    padrao_doc_cls, padrao_aula_cls, padrao_alin_cls = obter_classes_repositorios()
+    repo_aula = (repo_aula_cls or padrao_aula_cls)(banco_path)
+    repo_doc = (repo_doc_cls or padrao_doc_cls)(banco_path)
+    repo_alin = (repo_alin_cls or padrao_alin_cls)(banco_path)
 
     aulas = repo_aula.listar()
     documentos = repo_doc.listar()

@@ -25,17 +25,6 @@ class Alinhamento:
     justificativa: str | None = None
     origem: str = "automatic"
 
-    ESTRATEGIAS_VALIDAS = {
-        "bm25",
-        "embedding",
-        "temporal",
-        "temporal_hmm",
-        "hierarchical",
-        "hierarchical_hmm",
-        "hybrid",
-        "manual",
-    }
-
     def __post_init__(self) -> None:
         if not self.id_alinhamento:
             raise ValueError("id_alinhamento não pode ser vazio")

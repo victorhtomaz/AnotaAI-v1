@@ -12,7 +12,6 @@ from .imagens import (
 from .normalizacao import (
     limpar_texto_pagina,
     normalizar_conteudo_extraido,
-    normalizar_texto,
 )
 from .renderizador_pdf import RenderizadorPDFPyMuPDF
 from .unidades import segmentar_unidades_pagina
@@ -30,7 +29,6 @@ __all__ = [
     "identificar_xrefs_template",
     "limpar_texto_pagina",
     "normalizar_conteudo_extraido",
-    "normalizar_texto",
     "renderizar_pagina_png",
     "segmentar_unidades_pagina",
 ]
