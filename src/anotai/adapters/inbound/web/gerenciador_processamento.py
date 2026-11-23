@@ -72,6 +72,7 @@ class OpcoesProcessamento:
     estrategia_alinhamento: str = "hierarchical"
     estrategia_base: str = "hybrid"
     modelo_temporal: str = "hmm"
+    provedor_embedding: str = "ollama"
     modelo_embedding: str = "bge-m3:567m"
     limiar_abstencao: float = 0.0
     max_paginas: int = 3
@@ -99,6 +100,7 @@ class OpcoesProcessamento:
             limiar_silencio=settings.interval_silence_threshold,
             duracao_minima_intervalo=settings.interval_min_duration,
             duracao_maxima_intervalo=settings.interval_max_duration,
+            provedor_embedding=settings.embedding_provider,
             modelo_embedding=settings.embedding_model,
             limiar_abstencao=settings.abstention_threshold,
             peso_similaridade=settings.alignment_similarity_weight,
@@ -752,11 +754,15 @@ class GerenciadorProcessamento:
         self._atualizar(id_job, _iniciar_alin)
 
         indices_builder = self._indices_builder or construir_indices_busca
+        modelo_override = (
+            opcoes.modelo_embedding if opcoes.provedor_embedding == "ollama" else None
+        )
 
         idx_paginas, idx_unidades = indices_builder(
             estrategia_busca,
             self.settings,
-            modelo_override=opcoes.modelo_embedding,
+            modelo_override=modelo_override,
+            provedor_override=opcoes.provedor_embedding,
         )
         recuperador = self._recuperador_cls(
             indice_paginas=idx_paginas,

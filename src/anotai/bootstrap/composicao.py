@@ -17,7 +17,7 @@ from anotai.application.ports import (
     RepositorioDocumento,
 )
 from anotai.config import Settings
-from anotai.domain.exceptions import ErroAnaliseVisual, ErroTranscricao
+from anotai.domain.exceptions import ErroAnaliseVisual, ErroBusca, ErroTranscricao
 
 
 def obter_classes_repositorios() -> tuple[type, type, type]:
@@ -231,8 +231,88 @@ def criar_provedor_transcricao(
     )
 
 
+def criar_provedor_embedding(
+    settings: Settings,
+    *,
+    modelo_override: str | None = None,
+    provedor: str | None = None,
+    provedor_cls: Any = None,
+) -> Any:
+    """Instancia o provedor de embeddings (Ollama por padrão ou Google AI Studio)."""
+    provedor_efetivo = (
+        (provedor or getattr(settings, "embedding_provider", "ollama") or "ollama")
+        .strip()
+        .lower()
+    )
+
+    if provedor_efetivo == "google_ai_studio":
+        chave = getattr(settings, "google_api_key", "").strip()
+        if not chave:
+            raise ErroBusca(
+                "Chave do Google AI Studio não configurada: defina "
+                "ANOTAI_GOOGLE_API_KEY (ou GEMINI_API_KEY)."
+            )
+
+        modelo_google = (
+            (
+                modelo_override
+                or getattr(settings, "google_embedding_model", "gemini-embedding-001")
+            ).strip()
+            or "gemini-embedding-001"
+        )
+        dimensoes = getattr(settings, "google_embedding_dimensions", None)
+
+        classe = provedor_cls
+        if classe is None:
+            try:
+                import google.genai  # noqa: F401
+            except ImportError as exc:
+                raise ErroBusca(
+                    "SDK do Google GenAI não instalado. Execute: uv sync --extra google"
+                ) from exc
+
+            from anotai.adapters.outbound.google import ProvedorEmbeddingGoogleAIStudio
+
+            classe = ProvedorEmbeddingGoogleAIStudio
+
+        return classe(
+            chave=chave,
+            modelo=modelo_google,
+            dimensoes_saida=dimensoes,
+            max_tentativas=int(getattr(settings, "google_max_retries", 3)),
+            backoff_inicial_segundos=float(
+                getattr(settings, "google_backoff_initial_seconds", 2.0)
+            ),
+            intervalo_entre_requisicoes_segundos=float(
+                getattr(settings, "google_request_interval_seconds", 0.5)
+            ),
+            max_concorrencia=int(getattr(settings, "google_max_concurrency", 2)),
+        )
+
+    if provedor_efetivo != "ollama":
+        raise ErroBusca(f"Provedor de embedding não suportado: '{provedor_efetivo}'")
+
+    from ollama import Client
+
+    classe = provedor_cls
+    if classe is None:
+        from anotai.adapters.outbound.ollama.provedor_embedding import ProvedorEmbeddingOllama
+
+        classe = ProvedorEmbeddingOllama
+
+    modelo_emb = (modelo_override or settings.embedding_model).strip() or settings.embedding_model
+    return classe(
+        cliente=Client(host=settings.ollama_url),
+        modelo=modelo_emb,
+        manter_vivo=settings.ollama_keep_alive,
+    )
+
+
 def construir_indices_busca(
-    estrategia_base: str, settings: Settings, modelo_override: str | None = None
+    estrategia_base: str,
+    settings: Settings,
+    modelo_override: str | None = None,
+    provedor_override: str | None = None,
 ) -> tuple[Any, Any]:
     """Constrói os índices de busca de páginas e unidades conforme a estratégia escolhida."""
     from anotai.adapters.outbound.search import IndiceBM25, IndiceEmbeddings, IndiceHibrido
@@ -241,15 +321,10 @@ def construir_indices_busca(
         return IndiceBM25(), IndiceBM25()
 
     if estrategia_base in ("embedding", "hybrid"):
-        from ollama import Client
-
-        from anotai.adapters.outbound.ollama.provedor_embedding import ProvedorEmbeddingOllama
-
-        modelo_emb = modelo_override or settings.embedding_model
-        provedor = ProvedorEmbeddingOllama(
-            cliente=Client(host=settings.ollama_url),
-            modelo=modelo_emb,
-            manter_vivo=settings.ollama_keep_alive,
+        provedor = criar_provedor_embedding(
+            settings,
+            modelo_override=modelo_override,
+            provedor=provedor_override,
         )
         if estrategia_base == "embedding":
             return IndiceEmbeddings(provedor), IndiceEmbeddings(provedor)

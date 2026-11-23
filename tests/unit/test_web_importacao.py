@@ -299,6 +299,7 @@ def test_spa_index_assets_locais_e_opcoes_padrao(tmp_path: Path) -> None:
     assert dados_opcoes["provedor_visual"] == "ollama"
     assert dados_opcoes["modelo_whisperx"] == cfg.whisperx_model
     assert dados_opcoes["provedor_transcricao"] == "whisperx"
+    assert dados_opcoes["provedor_embedding"] == "ollama"
     assert dados_opcoes["idioma_transcricao"] == "pt-BR"
     assert dados_opcoes["metodo_pdf"] == "native_then_ocr"
     assert dados_opcoes["estrategia_base"] == "hybrid"
@@ -309,6 +310,7 @@ def test_spa_index_assets_locais_e_opcoes_padrao(tmp_path: Path) -> None:
     assert 'x-show="$store.anotai.opcoes.executar_alinhamento"' in html
     assert 'name="provedor_visual"' in html
     assert 'name="provedor_transcricao"' in html
+    assert 'name="provedor_embedding"' in html
     assert "Processamento em nuvem" in html
     assert "Google AI Studio" not in html
     assert "Azure Speech" not in html
@@ -1302,5 +1304,83 @@ def test_web_seleciona_provedores_nuvem_e_valida_invalidos(tmp_path: Path) -> No
         "max_concorrencia": 2,
     }
     assert chamadas["speech"] == ("speech-key", "francecentral", "en-US")
+
+
+def test_web_repassa_provedor_embedding_google_ai_studio(tmp_path: Path) -> None:
+    cfg = _settings_isoladas(tmp_path)
+    pdf_path = tmp_path / "aula.pdf"
+    audio_path = tmp_path / "aula.wav"
+    pdf_path.write_bytes(b"%PDF-1.4")
+    audio_path.write_bytes(b"RIFF")
+
+    doc = _documento_ficticio(pdf_path)
+    aula = _aula_ficticia(audio_path)
+    chamadas: list[tuple[str, Any, Any]] = []
+
+    def fake_indices_builder(
+        estrategia_base: str,
+        settings: Settings,
+        *,
+        modelo_override: str | None = None,
+        provedor_override: str | None = None,
+    ) -> tuple[Any, Any]:
+        chamadas.append((estrategia_base, modelo_override, provedor_override))
+        return MagicMock(), MagicMock()
+
+    repo_doc_mock = MagicMock()
+    repo_doc_mock.buscar_por_id.return_value = doc
+    repo_aula_mock = MagicMock()
+    repo_aula_mock.buscar_por_id.return_value = aula
+
+    class FakeAlinhar:
+        def __init__(self, **_kw: Any) -> None:
+            pass
+
+        def executar(self, *_args: Any, **_kwargs: Any) -> list[Any]:
+            return []
+
+    gestor = GerenciadorProcessamento(
+        settings=cfg,
+        executar_sincrono=True,
+        repo_doc_cls=lambda _: repo_doc_mock,
+        repo_aula_cls=lambda _: repo_aula_mock,
+        repo_alin_cls=lambda _: MagicMock(),
+        recuperador_cls=lambda **_kw: MagicMock(),
+        indices_builder=fake_indices_builder,
+        alinhar_cls=FakeAlinhar,
+    )
+    app = criar_app(settings=cfg, gerenciador=gestor)
+    client = ClienteTesteASGI(app)
+
+    resp_invalido = client.post(
+        "/api/documentos",
+        data={
+            "executar_pdf": "",
+            "executar_transcricao": "",
+            "executar_alinhamento": "on",
+            "id_documento_existente": doc.id_documento,
+            "id_aula_existente": aula.id_aula,
+            "provedor_embedding": "invalido",
+        },
+    )
+    assert resp_invalido.status_code == 400
+
+    resp_ok = client.post(
+        "/api/documentos",
+        data={
+            "executar_pdf": "",
+            "executar_transcricao": "",
+            "executar_alinhamento": "on",
+            "id_documento_existente": doc.id_documento,
+            "id_aula_existente": aula.id_aula,
+            "modo_alinhamento": "padrao",
+            "provedor_embedding": "google_ai_studio",
+        },
+    )
+    assert resp_ok.status_code == 202
+    job = client.get(f"/api/jobs/{resp_ok.json()['job_id']}").json()
+    assert job["status_geral"] == "concluido"
+    assert chamadas == [("hybrid", None, "google_ai_studio")]
+
 
 

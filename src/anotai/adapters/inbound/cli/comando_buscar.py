@@ -58,7 +58,13 @@ def configurar_parser_buscar(subparsers: argparse._SubParsersAction) -> None:
         "--model",
         type=str,
         default=None,
-        help="Modelo de embedding Ollama (usado se strategy for embedding ou hybrid).",
+        help="Modelo de embedding (usado se strategy for embedding ou hybrid).",
+    )
+    parser.add_argument(
+        "--embedding-provider",
+        choices=("ollama", "google_ai_studio"),
+        default=None,
+        help="Provedor de embeddings (sobrescreve ANOTAI_PROVEDOR_EMBEDDING).",
     )
 
 
@@ -198,9 +204,16 @@ def executar_comando_buscar(
     if documento is None:
         return 1
 
-    idx_paginas, idx_unidades = construir_indices_busca(
-        args.strategy, settings, modelo_override=args.model
-    )
+    try:
+        idx_paginas, idx_unidades = construir_indices_busca(
+            args.strategy,
+            settings,
+            modelo_override=args.model,
+            provedor_override=getattr(args, "embedding_provider", None),
+        )
+    except ErroBusca as exc:
+        print(f"Erro na recuperação documental: {exc}", file=sys.stderr)
+        return 1
 
     limiar = args.threshold if args.threshold is not None else settings.abstention_threshold
 

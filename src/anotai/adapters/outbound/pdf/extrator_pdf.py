@@ -33,10 +33,12 @@ from .imagens import (
     identificar_xrefs_template,
     renderizar_pagina_png,
 )
+from .layout import detectar_colunas, ordenar_por_leitura
 from .normalizacao import (
     limpar_texto_pagina,
     normalizar_conteudo_extraido,
 )
+from .regioes import RegiaoVetorial, detectar_regioes_vetoriais, detectar_tabelas
 from .unidades import segmentar_unidades_pagina
 
 PIPELINE_VERSION = "v1"
@@ -54,6 +56,7 @@ class _PaginaExtraidaBruta:
     unidades_nativas: list[UnidadeDocumento]
     elementos_visuais: list[tuple[str, bytes, CaixaDelimitadora | None]]
     eh_render_pagina_inteira: bool
+    colunas: list[tuple[float, float]]
 
 
 class ExtratorPDF:
@@ -124,7 +127,9 @@ class ExtratorPDF:
         try:
             documento_id = f"doc-{hashlib.sha256(str(caminho.resolve()).encode()).hexdigest()[:16]}"
             tipo_material = self._inferir_tipo_material(pdf)
-            paginas_brutas = self._extrair_estrutura_bruta(pdf, documento_id)
+            paginas_brutas, total_tabelas, total_regioes = self._extrair_estrutura_bruta(
+                pdf, documento_id
+            )
         finally:
             pdf.close()
 
@@ -148,6 +153,8 @@ class ExtratorPDF:
                 configuracao={
                     "ocr_escopo": "elementos_visuais",
                     "tipo_material": tipo_material,
+                    "tabelas_nativas": total_tabelas,
+                    "regioes_vetoriais": total_regioes,
                     **(
                         {"provedor_visual": provedor_visual}
                         if (
@@ -177,11 +184,16 @@ class ExtratorPDF:
         piso_drawings = calcular_piso_drawings(pdf)
 
         paginas_brutas: list[_PaginaExtraidaBruta] = []
+        total_tabelas_nativas = 0
+        total_regioes_vetoriais = 0
         for indice in range(total_paginas):
             pagina = pdf.load_page(indice)
             texto_nativo = textos_nativos[indice]
             pagina_id = f"{documento_id}-page-{indice + 1}"
             caracteres_uteis = contar_caracteres_uteis(texto_nativo, linhas_template)
+            tabelas_pag = detectar_tabelas(pagina, linhas_template)
+            total_tabelas_nativas += len(tabelas_pag)
+
             imagens_pag, render_pagina = extrair_insumos_visuais_pagina(
                 pdf,
                 pagina,
@@ -189,7 +201,36 @@ class ExtratorPDF:
                 caracteres_uteis=caracteres_uteis,
                 xrefs_template=xrefs_template,
                 piso_drawings=piso_drawings,
+                tem_regioes_vetoriais=False,
             )
+            regioes_vetoriais_pag: list[RegiaoVetorial] = []
+            if render_pagina is None:
+                regioes_vetoriais_pag = detectar_regioes_vetoriais(
+                    pagina,
+                    piso_drawings=piso_drawings,
+                    caixas_tabelas=[t.caixa for t in tabelas_pag],
+                    caixas_imagens=[img.caixa for img in imagens_pag],
+                )
+                total_regioes_vetoriais += len(regioes_vetoriais_pag)
+
+            # Extrai caixas de linhas para detectar colunas da página
+            caixas_linhas: list[tuple[float, float, float, float]] = []
+            dados_dict = pagina.get_text("dict", sort=False) or {}
+            for b in dados_dict.get("blocks", []):
+                if b.get("type") != 0:
+                    continue
+                for linha_dict in b.get("lines", []):
+                    spans = linha_dict.get("spans", [])
+                    txt_l = "".join(s.get("text", "") for s in spans).strip()
+                    if not txt_l or txt_l in linhas_template or txt_l.isdigit():
+                        continue
+                    bb = linha_dict.get("bbox", (0.0, 0.0, 0.0, 0.0))
+                    caixas_linhas.append(
+                        (float(bb[0]), float(bb[1]), float(bb[2]), float(bb[3]))
+                    )
+            largura_pagina = float(pagina.rect.width) if pagina.rect else 612.0
+            colunas_pag = detectar_colunas(caixas_linhas, largura_pagina)
+
             unidades_nativas = segmentar_unidades_pagina(
                 pagina=pagina,
                 documento_id=documento_id,
@@ -197,9 +238,19 @@ class ExtratorPDF:
                 linhas_template=linhas_template,
                 imagens=imagens_pag,
                 render_pagina=render_pagina,
+                tabelas=tabelas_pag,
+                regioes_vetoriais=regioes_vetoriais_pag,
+                colunas=colunas_pag,
             )
-            elementos_visuais = self._montar_elementos_visuais(imagens_pag, render_pagina)
-            texto_limpo = limpar_texto_pagina(texto_nativo, linhas_template)
+            elementos_visuais = self._montar_elementos_visuais(
+                imagens_pag, render_pagina, regioes_vetoriais_pag
+            )
+            textos_unidades = [u.texto for u in unidades_nativas if u.texto]
+            texto_limpo = (
+                normalizar_conteudo_extraido(" ".join(textos_unidades))
+                if textos_unidades
+                else limpar_texto_pagina(texto_nativo, linhas_template)
+            )
 
             paginas_brutas.append(
                 _PaginaExtraidaBruta(
@@ -210,18 +261,24 @@ class ExtratorPDF:
                     unidades_nativas=unidades_nativas,
                     elementos_visuais=elementos_visuais,
                     eh_render_pagina_inteira=render_pagina is not None,
+                    colunas=colunas_pag,
                 )
             )
-        return paginas_brutas
+        return paginas_brutas, total_tabelas_nativas, total_regioes_vetoriais
 
     @staticmethod
     def _montar_elementos_visuais(
         imagens: list[ImagemBrutaPdf],
         render_pagina: RenderPaginaPdf | None,
+        regioes_vetoriais: list[RegiaoVetorial] = (),
     ) -> list[tuple[str, bytes, CaixaDelimitadora | None]]:
         if render_pagina is not None:
             return [(render_pagina.evidencia, render_pagina.conteudo_bytes, render_pagina.caixa)]
-        return [(img.evidencia, img.conteudo_bytes, img.caixa) for img in imagens]
+        itens: list[tuple[str, bytes, CaixaDelimitadora | None]] = [
+            (img.evidencia, img.conteudo_bytes, img.caixa) for img in imagens
+        ]
+        itens.extend((rv.evidencia, rv.conteudo_bytes, rv.caixa) for rv in regioes_vetoriais)
+        return itens
 
     def _processar_ocr_e_montar_paginas(
         self,
@@ -276,7 +333,9 @@ class ExtratorPDF:
                 if teve_ocr:
                     metodo_extracao = "mixed"
 
-            unidades = self._ordenar_unidades(unidades, pag_bruta.pagina_id)
+            unidades = self._ordenar_unidades(
+                unidades, pag_bruta.pagina_id, colunas=pag_bruta.colunas
+            )
             texto_normalizado = pag_bruta.texto_limpo
 
             if metodo_extracao == "mixed":
@@ -369,13 +428,26 @@ class ExtratorPDF:
                 )
             )
         if novas_unidades:
+            rotulos_nativos = [
+                unidade.texto
+                for unidade in unidades
+                if unidade.fonte == "native"
+                and unidade.tipo == "figure"
+                and unidade.texto
+                and evidencia in unidade.ids_evidencias
+                and unidade.caixa == caixa
+            ]
+            if rotulos_nativos:
+                sufixo = " ".join(rotulos_nativos)
+                for nova in novas_unidades:
+                    if nova.texto and sufixo not in nova.texto:
+                        nova.texto = f"{nova.texto} ({sufixo})"
             unidades = [
                 unidade
                 for unidade in unidades
                 if not (
                     unidade.fonte == "native"
                     and unidade.tipo == "figure"
-                    and unidade.texto is None
                     and evidencia in unidade.ids_evidencias
                     and unidade.caixa == caixa
                 )
@@ -385,17 +457,37 @@ class ExtratorPDF:
 
     @staticmethod
     def _ordenar_unidades(
-        unidades: list[UnidadeDocumento], pagina_id: str
+        unidades: list[UnidadeDocumento],
+        pagina_id: str,
+        colunas: list[tuple[float, float]] | None = None,
     ) -> list[UnidadeDocumento]:
-        ordenadas = sorted(
-            unidades,
-            key=lambda u: (
-                u.caixa is None,
-                u.caixa.y0 if u.caixa is not None else 0.0,
-                u.caixa.x0 if u.caixa is not None else 0.0,
-                u.ordem_leitura,
-            ),
+        @dataclass(slots=True)
+        class _ItemUnidade:
+            unidade: UnidadeDocumento
+            x0: float
+            y0: float
+            x1: float
+            y1: float
+
+        com_caixa = [
+            _ItemUnidade(
+                unidade=u,
+                x0=u.caixa.x0,
+                y0=u.caixa.y0,
+                x1=u.caixa.x1,
+                y1=u.caixa.y1,
+            )
+            for u in unidades
+            if u.caixa is not None
+        ]
+        sem_caixa = sorted(
+            [u for u in unidades if u.caixa is None],
+            key=lambda u: u.ordem_leitura,
         )
+        ordenadas_caixa = [
+            item.unidade for item in ordenar_por_leitura(com_caixa, colunas or [])
+        ]
+        ordenadas = [*ordenadas_caixa, *sem_caixa]
         for indice, unidade in enumerate(ordenadas, start=1):
             unidade.ordem_leitura = indice
             unidade.id_unidade = f"{pagina_id}-unit-{indice}"

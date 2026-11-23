@@ -40,6 +40,7 @@
             estrategia_alinhamento: "hierarchical",
             estrategia_base: "hybrid",
             modelo_temporal: "hmm",
+            provedor_embedding: "ollama",
             modelo_embedding: "bge-m3:567m",
             limiar_abstencao: 0.0,
             max_paginas: 3,

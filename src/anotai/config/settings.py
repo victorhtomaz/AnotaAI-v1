@@ -15,6 +15,7 @@ class Settings:
     visual_seed: int = 42
     visual_think: bool = False
     ollama_keep_alive: str = "5m"
+    embedding_provider: str = "ollama"
     embedding_model: str = "bge-m3:567m"
     transcription_provider: str = "whisperx"
     whisperx_model: str = "large-v3"
@@ -27,6 +28,8 @@ class Settings:
         "gemma-4-26b-a4b-it",
         "gemini-2.5-flash-lite",
     )
+    google_embedding_model: str = "gemini-embedding-001"
+    google_embedding_dimensions: int | None = None
     google_max_retries: int = 3
     google_backoff_initial_seconds: float = 2.0
     google_request_interval_seconds: float = 0.5
@@ -63,6 +66,13 @@ class Settings:
             return padrao
         return tuple(item.strip() for item in bruto.split(",") if item.strip())
 
+    @staticmethod
+    def _parsear_int_opcional(bruto: str | None) -> int | None:
+        if bruto is None or not bruto.strip():
+            return None
+        valor = int(bruto.strip())
+        return valor if valor > 0 else None
+
     @classmethod
     def from_environment(cls) -> "Settings":
         load_dotenv()
@@ -80,6 +90,9 @@ class Settings:
             visual_seed=int(os.getenv("ANOTAI_OLLAMA_SEED", cls.visual_seed)),
             visual_think=os.getenv("ANOTAI_OLLAMA_PENSAR", "false").lower() == "true",
             ollama_keep_alive=os.getenv("ANOTAI_OLLAMA_KEEP_ALIVE", cls.ollama_keep_alive),
+            embedding_provider=(
+                os.getenv("ANOTAI_PROVEDOR_EMBEDDING", cls.embedding_provider).strip().lower()
+            ),
             embedding_model=os.getenv("ANOTAI_OLLAMA_MODELO_EMBEDDING", cls.embedding_model),
             transcription_provider=(
                 os.getenv("ANOTAI_PROVEDOR_TRANSCRICAO", cls.transcription_provider).strip().lower()
@@ -102,6 +115,13 @@ class Settings:
             google_visual_fallback_models=cls._parsear_lista_modelos(
                 os.getenv("ANOTAI_GOOGLE_MODELOS_FALLBACK"),
                 cls.google_visual_fallback_models,
+            ),
+            google_embedding_model=(
+                os.getenv("ANOTAI_GOOGLE_MODELO_EMBEDDING", cls.google_embedding_model).strip()
+                or cls.google_embedding_model
+            ),
+            google_embedding_dimensions=cls._parsear_int_opcional(
+                os.getenv("ANOTAI_GOOGLE_EMBEDDING_DIMENSOES")
             ),
             google_max_retries=max(
                 1,

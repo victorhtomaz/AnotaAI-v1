@@ -55,6 +55,7 @@ class OpcoesPadraoResponse(BaseModel):
     estrategia_alinhamento: str
     estrategia_base: str
     modelo_temporal: str
+    provedor_embedding: str
     modelo_embedding: str
     limiar_abstencao: float
     max_paginas: int

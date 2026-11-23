@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 
 import pymupdf as fitz
@@ -10,7 +11,9 @@ from anotai.domain.entities import UnidadeDocumento
 from anotai.domain.value_objects import CaixaDelimitadora
 
 from .imagens import ImagemBrutaPdf, RenderPaginaPdf
+from .layout import atribuir_coluna, detectar_colunas, ordenar_por_leitura
 from .normalizacao import normalizar_conteudo_extraido
+from .regioes import RegiaoTabela, RegiaoVetorial, ponto_em_caixas
 
 PADRAO_BULLET = re.compile(
     r"^([•◦▪‣–\-*·]|(\d+|[a-zA-Z])[\.\)])\s+",
@@ -53,6 +56,9 @@ def segmentar_unidades_pagina(
     linhas_template: set[str],
     imagens: Sequence[ImagemBrutaPdf],
     render_pagina: RenderPaginaPdf | None,
+    tabelas: Sequence[RegiaoTabela] = (),
+    regioes_vetoriais: Sequence[RegiaoVetorial] = (),
+    colunas: Sequence[tuple[float, float]] | None = None,
 ) -> list[UnidadeDocumento]:
     """Segmenta o conteúdo visual e textual de uma página em unidades estruturadas com bbox."""
     # Caso especial: Slide puramente visual ou página escaneada/colapsada de página inteira
@@ -71,8 +77,12 @@ def segmentar_unidades_pagina(
             )
         ]
 
-    dados_dict = pagina.get_text("dict", sort=True) or {}
+    dados_dict = pagina.get_text("dict", sort=False) or {}
     blocos_raw = dados_dict.get("blocks", [])
+
+    caixas_tabelas = [t.caixa for t in tabelas]
+    caixas_vetoriais = [r.caixa for r in regioes_vetoriais]
+    rotulos_vetoriais: dict[int, list[str]] = {idx: [] for idx in range(len(regioes_vetoriais))}
 
     tamanhos_fonte: list[float] = []
     linhas_candidatas: list[dict[str, Any]] = []
@@ -88,19 +98,41 @@ def segmentar_unidades_pagina(
             if texto_linha.isdigit():
                 continue
 
+            bbox_raw = linha_dict.get("bbox", (0.0, 0.0, 0.0, 0.0))
+            bx0, by0, bx1, by1 = (round(float(x), 2) for x in bbox_raw[:4])
+            cx = (bx0 + bx1) / 2.0
+            cy = (by0 + by1) / 2.0
+
+            if ponto_em_caixas(cx, cy, caixas_tabelas):
+                continue
+
+            em_regiao_vetorial = False
+            for idx_rv, caixa_rv in enumerate(caixas_vetoriais):
+                if caixa_rv.x0 <= cx <= caixa_rv.x1 and caixa_rv.y0 <= cy <= caixa_rv.y1:
+                    rotulos_vetoriais[idx_rv].append(texto_linha)
+                    em_regiao_vetorial = True
+                    break
+            if em_regiao_vetorial:
+                continue
+
             sizes = [float(s.get("size", 12.0)) for s in spans if s.get("text", "").strip()]
             tam_medio = sum(sizes) / len(sizes) if sizes else 12.0
             tamanhos_fonte.append(tam_medio)
 
-            bbox_raw = linha_dict.get("bbox", (0.0, 0.0, 0.0, 0.0))
             linhas_candidatas.append(
                 {
                     "texto": texto_linha,
-                    "bbox": tuple(round(float(x), 2) for x in bbox_raw[:4]),
+                    "bbox": (bx0, by0, bx1, by1),
                     "tam_fonte": tam_medio,
                 }
             )
 
+    largura_pagina = float(pagina.rect.width) if pagina.rect else 612.0
+    colunas_efetivas = (
+        list(colunas)
+        if colunas is not None
+        else detectar_colunas([item["bbox"] for item in linhas_candidatas], largura_pagina)
+    )
     mediana_fonte = sorted(tamanhos_fonte)[len(tamanhos_fonte) // 2] if tamanhos_fonte else 12.0
 
     unidades_texto: list[dict[str, Any]] = []
@@ -148,44 +180,81 @@ def segmentar_unidades_pagina(
         )
         bloco_atual.clear()
 
+    linhas_por_coluna: list[list[dict[str, Any]]] = [[] for _ in colunas_efetivas]
     for item in linhas_candidatas:
-        txt = item["texto"]
-        eh_inicio_bullet = _eh_bullet(txt)
-        eh_inicio_legenda = _eh_legenda(txt)
-        eh_linha_formula = _eh_formula(txt)
+        idx_col = atribuir_coluna(item["bbox"][0], item["bbox"][2], colunas_efetivas)
+        linhas_por_coluna[idx_col].append(item)
 
-        deve_quebrar = False
-        if bloco_atual:
-            ultimo = bloco_atual[-1]
-            salto_vertical = item["bbox"][1] - ultimo["bbox"][3]
-            altura_linha = max(1.0, ultimo["bbox"][3] - ultimo["bbox"][1])
-            variacao_fonte = abs(item["tam_fonte"] - ultimo["tam_fonte"]) / max(
-                1.0, ultimo["tam_fonte"]
-            )
+    for grupo_col in linhas_por_coluna:
+        grupo_col.sort(key=lambda item: (item["bbox"][1], item["bbox"][0]))
+        for item in grupo_col:
+            txt = item["texto"]
+            eh_inicio_bullet = _eh_bullet(txt)
+            eh_inicio_legenda = _eh_legenda(txt)
+            eh_linha_formula = _eh_formula(txt)
 
-            quebra_espaco = salto_vertical > altura_linha * 1.3
-            quebra_pos_titulo = len(bloco_atual) == 1 and _eh_titulo_caixa_alta(ultimo["texto"])
-            quebra_pos_bullet = _eh_bullet(bloco_atual[0]["texto"]) and not eh_inicio_bullet
-            quebra_pos_legenda = _eh_legenda(bloco_atual[0]["texto"])
-            if (
-                eh_inicio_bullet
-                or eh_inicio_legenda
-                or eh_linha_formula
-                or quebra_espaco
-                or variacao_fonte > 0.20
-                or quebra_pos_titulo
-                or quebra_pos_bullet
-                or quebra_pos_legenda
-            ):
-                deve_quebrar = True
+            deve_quebrar = False
+            if bloco_atual:
+                ultimo = bloco_atual[-1]
+                salto_vertical = item["bbox"][1] - ultimo["bbox"][3]
+                altura_linha = max(1.0, ultimo["bbox"][3] - ultimo["bbox"][1])
+                variacao_fonte = abs(item["tam_fonte"] - ultimo["tam_fonte"]) / max(
+                    1.0, ultimo["tam_fonte"]
+                )
+                x_overlap = min(item["bbox"][2], ultimo["bbox"][2]) - max(
+                    item["bbox"][0], ultimo["bbox"][0]
+                )
 
-        if deve_quebrar:
-            fechar_bloco_atual()
-        bloco_atual.append(item)
+                quebra_espaco = salto_vertical > altura_linha * 1.3
+                quebra_horizontal = x_overlap <= 0.0
+                quebra_pos_titulo = len(bloco_atual) == 1 and _eh_titulo_caixa_alta(
+                    ultimo["texto"]
+                )
+                quebra_pos_bullet = _eh_bullet(bloco_atual[0]["texto"]) and not eh_inicio_bullet
+                quebra_pos_legenda = _eh_legenda(bloco_atual[0]["texto"])
+                if (
+                    eh_inicio_bullet
+                    or eh_inicio_legenda
+                    or eh_linha_formula
+                    or quebra_espaco
+                    or quebra_horizontal
+                    or variacao_fonte > 0.20
+                    or quebra_pos_titulo
+                    or quebra_pos_bullet
+                    or quebra_pos_legenda
+                ):
+                    deve_quebrar = True
 
-    fechar_bloco_atual()
+            if deve_quebrar:
+                fechar_bloco_atual()
+            bloco_atual.append(item)
+
+        fechar_bloco_atual()
 
     unidades_todas: list[dict[str, Any]] = list(unidades_texto)
+    for tab in tabelas:
+        unidades_todas.append(
+            {
+                "tipo": "table",
+                "texto": tab.texto,
+                "caixa": tab.caixa,
+                "y0": tab.caixa.y0,
+                "x0": tab.caixa.x0,
+                "evidencias": [tab.evidencia],
+            }
+        )
+    for idx_rv, rv in enumerate(regioes_vetoriais):
+        rotulos = normalizar_conteudo_extraido(" ".join(rotulos_vetoriais.get(idx_rv, [])))
+        unidades_todas.append(
+            {
+                "tipo": "figure",
+                "texto": rotulos or None,
+                "caixa": rv.caixa,
+                "y0": rv.caixa.y0,
+                "x0": rv.caixa.x0,
+                "evidencias": [rv.evidencia],
+            }
+        )
     for img in imagens:
         unidades_todas.append(
             {
@@ -198,10 +267,28 @@ def segmentar_unidades_pagina(
             }
         )
 
-    unidades_todas.sort(key=lambda u: (u["y0"], u["x0"]))
+    @dataclass(slots=True)
+    class _ItemOrdenavel:
+        dados: dict[str, Any]
+        x0: float
+        y0: float
+        x1: float
+        y1: float
+
+    ordenaveis = [
+        _ItemOrdenavel(
+            dados=u,
+            x0=u["caixa"].x0,
+            y0=u["caixa"].y0,
+            x1=u["caixa"].x1,
+            y1=u["caixa"].y1,
+        )
+        for u in unidades_todas
+    ]
+    unidades_ordenadas = [item.dados for item in ordenar_por_leitura(ordenaveis, colunas_efetivas)]
 
     resultado: list[UnidadeDocumento] = []
-    for ordem, u in enumerate(unidades_todas, start=1):
+    for ordem, u in enumerate(unidades_ordenadas, start=1):
         resultado.append(
             UnidadeDocumento(
                 id_unidade=f"{pagina_id}-unit-{ordem}",

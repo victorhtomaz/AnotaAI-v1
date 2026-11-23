@@ -80,6 +80,13 @@ def extrair_opcoes(form: FormData, settings: Settings) -> OpcoesProcessamento:
     if provedor_transcricao not in ("whisperx", "azure_speech"):
         raise ValueError(f"Provedor de transcrição inválido: '{provedor_transcricao}'.")
 
+    provedor_embedding = (
+        _texto(form, "provedor_embedding", padrao.provedor_embedding)
+        or padrao.provedor_embedding
+    ).lower()
+    if provedor_embedding not in ("ollama", "google_ai_studio"):
+        raise ValueError(f"Provedor de embeddings inválido: '{provedor_embedding}'.")
+
     idioma_transcricao = (
         _texto(form, "idioma_transcricao", padrao.idioma_transcricao)
         or padrao.idioma_transcricao
@@ -129,6 +136,7 @@ def extrair_opcoes(form: FormData, settings: Settings) -> OpcoesProcessamento:
         ),
         estrategia_base=_texto(form, "estrategia_base", padrao.estrategia_base),
         modelo_temporal=_texto(form, "modelo_temporal", padrao.modelo_temporal),
+        provedor_embedding=provedor_embedding,
         modelo_embedding=(
             _texto(form, "modelo_embedding", padrao.modelo_embedding) or padrao.modelo_embedding
         ),

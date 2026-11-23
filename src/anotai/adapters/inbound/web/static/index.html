@@ -499,7 +499,7 @@
                                 </div>
                             </div>
 
-                            <div class="grade-campos">
+                            <div class="grade-campos grade-2">
                                 <div class="campo-grupo">
                                     <label for="modo_alinhamento" class="campo-rotulo">Perfil de alinhamento</label>
                                     <select
@@ -513,6 +513,20 @@
                                         <option value="semantico">Semântico — Correspondência por significado</option>
                                         <option value="lexical">Lexical — Correspondência por termos exatos</option>
                                         <option value="personalizado">Personalizado (combinar parâmetros abaixo)</option>
+                                    </select>
+                                </div>
+                                <div
+                                    class="campo-grupo"
+                                    x-show="$store.anotai.opcoes.modo_alinhamento === 'padrao' || $store.anotai.opcoes.modo_alinhamento === 'semantico' || ($store.anotai.opcoes.modo_alinhamento === 'personalizado' && ($store.anotai.opcoes.estrategia_alinhamento === 'embedding' || ($store.anotai.opcoes.estrategia_alinhamento !== 'bm25' && $store.anotai.opcoes.estrategia_base !== 'bm25')))"
+                                >
+                                    <label for="provedor_embedding" class="campo-rotulo">Serviço de embeddings</label>
+                                    <select
+                                        id="provedor_embedding"
+                                        name="provedor_embedding"
+                                        x-model="$store.anotai.opcoes.provedor_embedding"
+                                    >
+                                        <option value="ollama">Processamento local</option>
+                                        <option value="google_ai_studio">Processamento em nuvem</option>
                                     </select>
                                 </div>
                             </div>

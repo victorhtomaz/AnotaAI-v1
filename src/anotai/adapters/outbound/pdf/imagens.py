@@ -101,9 +101,9 @@ def identificar_xrefs_template(doc: fitz.Document) -> set[int]:
 
 
 def calcular_piso_drawings(doc: fitz.Document) -> int:
-    amostra = min(doc.page_count, 10)
-    if amostra == 0:
+    if doc.page_count < 2:
         return 0
+    amostra = min(doc.page_count, 10)
     contagens: list[int] = []
     for idx in range(amostra):
         pagina = doc.load_page(idx)
@@ -205,6 +205,7 @@ def extrair_insumos_visuais_pagina(
     caracteres_uteis: int,
     xrefs_template: set[int],
     piso_drawings: int,
+    tem_regioes_vetoriais: bool = False,
 ) -> tuple[list[ImagemBrutaPdf], RenderPaginaPdf | None]:
     candidatas_raw: list[tuple[int, int, int, int, CaixaDelimitadora, float]] = []
     xrefs_vistos: set[int] = set()
@@ -282,7 +283,11 @@ def extrair_insumos_visuais_pagina(
         )
 
     render_pagina: RenderPaginaPdf | None = None
-    if caracteres_uteis < LIMIAR_CARACTERES_UTEIS_SLIDE_VISUAL and not imagens_extraidas:
+    if (
+        caracteres_uteis < LIMIAR_CARACTERES_UTEIS_SLIDE_VISUAL
+        and not imagens_extraidas
+        and not tem_regioes_vetoriais
+    ):
         try:
             total_drawings = len(pagina.get_drawings())
         except Exception:

@@ -172,7 +172,13 @@ def configurar_parser_alinhar(subparsers: argparse._SubParsersAction) -> None:
         "--model",
         type=str,
         default=None,
-        help="Modelo de embedding Ollama (usado se base-strategy/strategy usar embedding).",
+        help="Modelo de embedding (usado se base-strategy/strategy usar embedding).",
+    )
+    parser.add_argument(
+        "--embedding-provider",
+        choices=("ollama", "google_ai_studio"),
+        default=None,
+        help="Provedor de embeddings (sobrescreve ANOTAI_PROVEDOR_EMBEDDING).",
     )
 
 
@@ -340,9 +346,16 @@ def executar_comando_alinhar(
         if estrategia in ("bm25", "embedding", "hybrid")
         else base_strategy
     )
-    idx_paginas, idx_unidades = construir_indices_busca(
-        estrategia_base, settings, modelo_override=getattr(args, "model", None)
-    )
+    try:
+        idx_paginas, idx_unidades = construir_indices_busca(
+            estrategia_base,
+            settings,
+            modelo_override=getattr(args, "model", None),
+            provedor_override=getattr(args, "embedding_provider", None),
+        )
+    except ErroBusca as exc:
+        print(f"Erro ao preparar índices de alinhamento: {exc}", file=sys.stderr)
+        return 1
 
     limiar = args.threshold if args.threshold is not None else settings.abstention_threshold
     recuperador = recuperador_cls(

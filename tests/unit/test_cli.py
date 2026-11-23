@@ -386,6 +386,32 @@ def test_cli_opcoes_nuvem_pdf_e_transcrever(tmp_path: Path, capsys) -> None:
         assert cod_asr == 1
         assert "ANOTAI_AZURE_SPEECH" in capsys.readouterr().err
 
+        cod_buscar = main(
+            [
+                "buscar",
+                "aula-1",
+                "doc-1",
+                "--strategy",
+                "embedding",
+                "--embedding-provider",
+                "google_ai_studio",
+            ]
+        )
+        assert cod_buscar == 1
+
+        cod_alinhar = main(
+            [
+                "alinhar",
+                "aula-1",
+                "doc-1",
+                "--base-strategy",
+                "hybrid",
+                "--embedding-provider",
+                "google_ai_studio",
+            ]
+        )
+        assert cod_alinhar == 1
+
 
 def test_bootstrap_rejeita_provedores_desconhecidos_ou_sem_credenciais() -> None:
     from anotai.bootstrap import criar_analisador_visual, criar_provedor_transcricao

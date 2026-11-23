@@ -102,6 +102,7 @@ def criar_app(
             estrategia_alinhamento=padrao.estrategia_alinhamento,
             estrategia_base=padrao.estrategia_base,
             modelo_temporal=padrao.modelo_temporal,
+            provedor_embedding=padrao.provedor_embedding,
             modelo_embedding=padrao.modelo_embedding,
             limiar_abstencao=padrao.limiar_abstencao,
             max_paginas=padrao.max_paginas,
